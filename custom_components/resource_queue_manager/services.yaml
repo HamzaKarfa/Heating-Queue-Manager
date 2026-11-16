@@ -1,11 +1,11 @@
 request:
   fields:
-    heater_id:
+    resource_id:
       required: true
-      example: ch1
+      example: zone_1
       selector:
         text:
-    relay_entity_id:
+    entity_id:
       required: true
       example: light.relais_chauffage_chambre_1
       selector:
@@ -16,17 +16,17 @@ request:
 
 release:
   fields:
-    heater_id:
+    resource_id:
       required: true
-      example: ch1
+      example: zone_1
       selector:
         text:
 
 cancel:
   fields:
-    heater_id:
+    resource_id:
       required: true
-      example: ch1
+      example: zone_1
       selector:
         text:
 

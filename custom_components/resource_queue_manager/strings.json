@@ -1,0 +1,70 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Resource Queue Manager (FIFO)",
+        "description": "Configure the maximum number of simultaneous resource reservations.",
+        "data": {
+          "max_active": "Maximum simultaneous resources"
+        }
+      }
+    }
+  },
+  "services": {
+    "request": {
+      "name": "Request slot",
+      "description": "Request a FIFO slot without actuating an entity.",
+      "fields": {
+        "resource_id": {
+          "name": "Resource ID",
+          "description": "Stable resource identifier, for example zone_1."
+        },
+        "entity_id": {
+          "name": "Supervised entity",
+          "description": "Supervised light or switch entity that must be OFF before release."
+        }
+      }
+    },
+    "release": {
+      "name": "Release slot",
+      "description": "Release a reservation only if Home Assistant reports its entity OFF.",
+      "fields": {
+        "resource_id": {
+          "name": "Resource ID",
+          "description": "Previously requested resource ID."
+        }
+      }
+    },
+    "cancel": {
+      "name": "Cancel request",
+      "description": "Remove a waiting request or release an OFF reservation.",
+      "fields": {
+        "resource_id": {
+          "name": "Resource ID",
+          "description": "Previously requested resource ID."
+        }
+      }
+    },
+    "resume": {
+      "name": "Resume queue after restart",
+      "description": "Verify supervised entities and resume FIFO grants. Inspect equipment before recovery."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Supervised resources and FIFO capacity",
+        "description": "Select supervised light or switch entities and the maximum concurrent reservations. Existing bookings remain protected.",
+        "data": {
+          "monitored_entities": "Supervised entities",
+          "max_active": "Maximum simultaneous reservations"
+        }
+      }
+    },
+    "error": {
+      "storage_unavailable": "Cannot read saved bookings. Configuration unchanged.",
+      "max_active_below_reserved": "Cannot reduce the limit below the number of currently active reservations.",
+      "entities_in_use": "Cannot deselect an entity with an active or waiting reservation."
+    }
+  }
+}

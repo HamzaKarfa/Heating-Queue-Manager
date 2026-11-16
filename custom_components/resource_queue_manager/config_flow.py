@@ -12,7 +12,7 @@ from homeassistant.helpers.storage import Store
 
 from .const import (
     CONF_MAX_ACTIVE,
-    CONF_MONITORED_RELAYS,
+    CONF_MONITORED_ENTITIES,
     DEFAULT_MAX_ACTIVE,
     DOMAIN,
 )
@@ -20,8 +20,8 @@ from .const import (
 STORAGE_VERSION = 1
 
 
-class HeatingQueueManagerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
-    """Configure one singleton Heating Queue Manager instance."""
+class ResourceQueueManagerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
+    """Configure one singleton Resource Queue Manager (FIFO) instance."""
 
     VERSION = 1
 
@@ -31,7 +31,7 @@ class HeatingQueueManagerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             await self.async_set_unique_id(DOMAIN)
             self._abort_if_unique_id_configured()
             return self.async_create_entry(
-                title="Heating Queue Manager", data=user_input
+                title="Resource Queue Manager (FIFO)", data=user_input
             )
 
         schema = vol.Schema(
@@ -46,13 +46,13 @@ class HeatingQueueManagerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     @callback
     def async_get_options_flow(
         config_entry: ConfigEntry,
-    ) -> "HeatingQueueOptionsFlow":
+    ) -> "ResourceQueueOptionsFlow":
         """Expose the Configure button in Home Assistant."""
-        return HeatingQueueOptionsFlow()
+        return ResourceQueueOptionsFlow()
 
 
-class HeatingQueueOptionsFlow(OptionsFlowWithReload):
-    """Edit both the slot limit and the explicitly supervised relay list."""
+class ResourceQueueOptionsFlow(OptionsFlowWithReload):
+    """Edit both the slot limit and the explicitly supervised entity list."""
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
@@ -60,7 +60,7 @@ class HeatingQueueOptionsFlow(OptionsFlowWithReload):
         """Validate changes against currently queued reservations."""
         entry = self.config_entry
         errors: dict[str, str] = {}
-        existing = list(entry.options.get(CONF_MONITORED_RELAYS, []))
+        existing = list(entry.options.get(CONF_MONITORED_ENTITIES, []))
         current_limit = entry.options.get(
             CONF_MAX_ACTIVE,
             entry.data.get(CONF_MAX_ACTIVE, DEFAULT_MAX_ACTIVE),
@@ -69,7 +69,7 @@ class HeatingQueueOptionsFlow(OptionsFlowWithReload):
         new_limit = current_limit
 
         if user_input is not None:
-            selected = list(user_input.get(CONF_MONITORED_RELAYS, []))
+            selected = list(user_input.get(CONF_MONITORED_ENTITIES, []))
             new_limit = user_input[CONF_MAX_ACTIVE]
             runtime = self.hass.data.get(DOMAIN, {}).get(entry.entry_id)
             if runtime is not None:
@@ -80,7 +80,7 @@ class HeatingQueueOptionsFlow(OptionsFlowWithReload):
                     bindings = saved["bindings"]
                     active = saved["active"]
                     if not set(bindings.values()).issubset(selected):
-                        errors["base"] = "relays_in_use"
+                        errors["base"] = "entities_in_use"
                     elif new_limit < len(active):
                         errors["base"] = "max_active_below_reserved"
                     if not errors:
@@ -102,7 +102,7 @@ class HeatingQueueOptionsFlow(OptionsFlowWithReload):
                     if not isinstance(bindings, dict) or not isinstance(active, list):
                         raise ValueError("Invalid stored queue")
                     if not set(bindings.values()).issubset(selected):
-                        errors["base"] = "relays_in_use"
+                        errors["base"] = "entities_in_use"
                     elif new_limit < len(active):
                         errors["base"] = "max_active_below_reserved"
                 except Exception:
@@ -111,7 +111,7 @@ class HeatingQueueOptionsFlow(OptionsFlowWithReload):
             if not errors:
                 return self.async_create_entry(
                     data={
-                        CONF_MONITORED_RELAYS: selected,
+                        CONF_MONITORED_ENTITIES: selected,
                         CONF_MAX_ACTIVE: new_limit,
                     }
                 )
@@ -125,7 +125,7 @@ class HeatingQueueOptionsFlow(OptionsFlowWithReload):
                     vol.Coerce(int), vol.Range(min=1, max=50)
                 ),
                 vol.Optional(
-                    CONF_MONITORED_RELAYS,
+                    CONF_MONITORED_ENTITIES,
                     default=selected,
                 ): EntitySelector(
                     EntitySelectorConfig(

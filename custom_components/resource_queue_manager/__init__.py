@@ -1,4 +1,4 @@
-"""Heating Queue Manager: persisted FIFO reservations, no relay switching."""
+"""Resource Queue Manager (FIFO): persisted FIFO reservations, no entity switching."""
 
 import asyncio
 from dataclasses import dataclass
@@ -14,10 +14,10 @@ from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.storage import Store
 
 from .const import (
-    ATTR_HEATER_ID,
-    ATTR_RELAY_ENTITY_ID,
+    ATTR_RESOURCE_ID,
+    ATTR_ENTITY_ID,
     CONF_MAX_ACTIVE,
-    CONF_MONITORED_RELAYS,
+    CONF_MONITORED_ENTITIES,
     DEFAULT_MAX_ACTIVE,
     DOMAIN,
     EVENT_SLOT_GRANTED,
@@ -27,7 +27,7 @@ from .const import (
     SERVICE_RESUME,
     SIGNAL_QUEUE_UPDATED,
 )
-from .coordinator import HeatingQueueCoordinator, QueueStateError
+from .coordinator import ResourceQueueCoordinator, QueueStateError
 from .fifo import QueueResult
 
 PLATFORMS = [Platform.SENSOR]
@@ -35,18 +35,18 @@ STORAGE_VERSION = 1
 
 REQUEST_SCHEMA = vol.Schema(
     {
-        vol.Required(ATTR_HEATER_ID): cv.string,
-        vol.Required(ATTR_RELAY_ENTITY_ID): cv.entity_id,
+        vol.Required(ATTR_RESOURCE_ID): cv.string,
+        vol.Required(ATTR_ENTITY_ID): cv.entity_id,
     }
 )
-HEATER_SCHEMA = vol.Schema({vol.Required(ATTR_HEATER_ID): cv.string})
+RESOURCE_SCHEMA = vol.Schema({vol.Required(ATTR_RESOURCE_ID): cv.string})
 
 
 @dataclass
 class QueueRuntime:
     """Queue, persistence and lock owned by one config entry."""
 
-    manager: HeatingQueueCoordinator
+    manager: ResourceQueueCoordinator
     store: Store
     lock: asyncio.Lock
 
@@ -59,19 +59,19 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
         loaded = hass.data[DOMAIN]
         if len(loaded) != 1:
             raise HomeAssistantError(
-                "Heating Queue Manager must have exactly one loaded config entry"
+                "Resource Queue Manager (FIFO) must have exactly one loaded config entry"
             )
         return next(iter(loaded.items()))
 
     def _publish(entry_id: str, runtime: QueueRuntime, result: QueueResult) -> None:
         """Publish only after the queue snapshot has been written to disk."""
         async_dispatcher_send(hass, SIGNAL_QUEUE_UPDATED, entry_id)
-        for heater_id in result.granted:
+        for resource_id in result.granted:
             hass.bus.async_fire(
                 EVENT_SLOT_GRANTED,
                 {
-                    ATTR_HEATER_ID: heater_id,
-                    ATTR_RELAY_ENTITY_ID: runtime.manager.relay_for(heater_id),
+                    ATTR_RESOURCE_ID: resource_id,
+                    ATTR_ENTITY_ID: runtime.manager.entity_for(resource_id),
                     "config_entry_id": entry_id,
                 },
             )
@@ -92,13 +92,13 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
             try:
                 if operation == SERVICE_REQUEST:
                     result = runtime.manager.request(
-                        call.data[ATTR_HEATER_ID],
-                        call.data[ATTR_RELAY_ENTITY_ID],
+                        call.data[ATTR_RESOURCE_ID],
+                        call.data[ATTR_ENTITY_ID],
                     )
                 elif operation == SERVICE_RELEASE:
-                    result = runtime.manager.release(call.data[ATTR_HEATER_ID])
+                    result = runtime.manager.release(call.data[ATTR_RESOURCE_ID])
                 elif operation == SERVICE_CANCEL:
-                    result = runtime.manager.cancel(call.data[ATTR_HEATER_ID])
+                    result = runtime.manager.cancel(call.data[ATTR_RESOURCE_ID])
                 else:
                     raise HomeAssistantError("Unsupported queue operation")
             except QueueStateError as err:
@@ -123,7 +123,7 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
         await _mutate(call, SERVICE_CANCEL)
 
     async def async_resume(call: ServiceCall) -> None:
-        """Explicitly re-enable grants after relay state inspection."""
+        """Explicitly re-enable grants after entity state inspection."""
         entry_id, runtime = _get_runtime()
         async with runtime.lock:
             try:
@@ -141,10 +141,10 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
         DOMAIN, SERVICE_REQUEST, async_request, schema=REQUEST_SCHEMA
     )
     hass.services.async_register(
-        DOMAIN, SERVICE_RELEASE, async_release, schema=HEATER_SCHEMA
+        DOMAIN, SERVICE_RELEASE, async_release, schema=RESOURCE_SCHEMA
     )
     hass.services.async_register(
-        DOMAIN, SERVICE_CANCEL, async_cancel, schema=HEATER_SCHEMA
+        DOMAIN, SERVICE_CANCEL, async_cancel, schema=RESOURCE_SCHEMA
     )
     hass.services.async_register(
         DOMAIN, SERVICE_RESUME, async_resume, schema=vol.Schema({})
@@ -153,8 +153,8 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Restore reservations and known relays; always boot paused."""
-    def get_relay_state(entity_id: str) -> str | None:
+    """Restore reservations and known entities; always boot paused."""
+    def get_entity_state(entity_id: str) -> str | None:
         state = hass.states.get(entity_id)
         return state.state if state is not None else None
 
@@ -164,23 +164,23 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     try:
         saved = await store.async_load()
         if saved is None:
-            manager = HeatingQueueCoordinator(
+            manager = ResourceQueueCoordinator(
                 max_active=entry.options.get(
                     CONF_MAX_ACTIVE,
                     entry.data.get(CONF_MAX_ACTIVE, DEFAULT_MAX_ACTIVE),
                 ),
-                relay_state=get_relay_state,
-                monitored_relays=entry.options.get(CONF_MONITORED_RELAYS, []),
+                entity_state=get_entity_state,
+                monitored_entities=entry.options.get(CONF_MONITORED_ENTITIES, []),
             )
         else:
-            manager = HeatingQueueCoordinator.from_state(
+            manager = ResourceQueueCoordinator.from_state(
                 max_active=entry.options.get(
                     CONF_MAX_ACTIVE,
                     entry.data.get(CONF_MAX_ACTIVE, DEFAULT_MAX_ACTIVE),
                 ),
-                relay_state=get_relay_state,
+                entity_state=get_entity_state,
                 saved=saved,
-                monitored_relays=entry.options.get(CONF_MONITORED_RELAYS, []),
+                monitored_entities=entry.options.get(CONF_MONITORED_ENTITIES, []),
                 legacy_max_active=entry.data.get(
                     CONF_MAX_ACTIVE, DEFAULT_MAX_ACTIVE
                 ),

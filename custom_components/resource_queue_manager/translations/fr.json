@@ -1,0 +1,70 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Resource Queue Manager (FIFO)",
+        "description": "Configurez le nombre maximal de réservations simultanées.",
+        "data": {
+          "max_active": "Nombre maximal de ressources simultanées"
+        }
+      }
+    }
+  },
+  "services": {
+    "request": {
+      "name": "Demander une place",
+      "description": "Demande une place FIFO sans piloter l'entité.",
+      "fields": {
+        "resource_id": {
+          "name": "Identifiant de la ressource",
+          "description": "Identifiant stable d'une ressource, par exemple chambre_1."
+        },
+        "entity_id": {
+          "name": "Entité supervisée",
+          "description": "Entité light ou switch supervisée qui doit être éteinte avant libération."
+        }
+      }
+    },
+    "release": {
+      "name": "Libérer une place",
+      "description": "Libère une réservation uniquement si HA signale le relais éteint.",
+      "fields": {
+        "resource_id": {
+          "name": "Identifiant de la ressource",
+          "description": "Identifiant de ressource demandé précédemment."
+        }
+      }
+    },
+    "cancel": {
+      "name": "Annuler une demande",
+      "description": "Annule une attente ou libère une réservation dont le relais est éteint.",
+      "fields": {
+        "resource_id": {
+          "name": "Identifiant de la ressource",
+          "description": "Identifiant de ressource demandé précédemment."
+        }
+      }
+    },
+    "resume": {
+      "name": "Reprendre la file après redémarrage",
+      "description": "Vérifie les entités supervisées et réactive les réservations FIFO. Contrôlez les équipements avant de reprendre."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Ressources supervisées et capacité FIFO",
+        "description": "Sélectionnez les entités light ou switch supervisées et le nombre maximal de réservations simultanées. Les réservations existantes restent protégées.",
+        "data": {
+          "monitored_entities": "Entités supervisées",
+          "max_active": "Nombre maximal de réservations simultanées"
+        }
+      }
+    },
+    "error": {
+      "storage_unavailable": "Impossible de lire les réservations sauvegardées. Configuration inchangée.",
+      "max_active_below_reserved": "Impossible de réduire la limite sous le nombre de réservations actuellement actives.",
+      "entities_in_use": "Impossible de désélectionner une entité avec une réservation active ou en attente."
+    }
+  }
+}

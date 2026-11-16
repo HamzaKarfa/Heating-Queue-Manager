@@ -7,7 +7,7 @@ from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import DOMAIN, SIGNAL_QUEUE_UPDATED
-from .coordinator import HeatingQueueCoordinator
+from .coordinator import ResourceQueueCoordinator
 
 
 async def async_setup_entry(
@@ -16,26 +16,26 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Expose counts and a status sensor for recovery."""
-    manager: HeatingQueueCoordinator = hass.data[DOMAIN][entry.entry_id].manager
+    manager: ResourceQueueCoordinator = hass.data[DOMAIN][entry.entry_id].manager
     async_add_entities(
         [
-            HeatingQueueSensor(hass, entry.entry_id, manager, metric)
+            ResourceQueueSensor(hass, entry.entry_id, manager, metric)
             for metric in ("active", "waiting", "available", "status")
         ]
     )
 
 
-class HeatingQueueSensor(SensorEntity):
+class ResourceQueueSensor(SensorEntity):
     """A FIFO counter or a readiness indicator with queue attributes."""
 
     _attr_should_poll = False
-    _attr_icon = "mdi:radiator"
+    _attr_icon = "mdi:playlist-check"
 
     def __init__(
         self,
         hass: HomeAssistant,
         entry_id: str,
-        manager: HeatingQueueCoordinator,
+        manager: ResourceQueueCoordinator,
         metric: str,
     ) -> None:
         self.hass = hass
@@ -43,7 +43,7 @@ class HeatingQueueSensor(SensorEntity):
         self._manager = manager
         self._metric = metric
         self._attr_unique_id = f"{entry_id}_{metric}"
-        self._attr_name = f"Heating Queue {metric.capitalize()}"
+        self._attr_name = f"Resource Queue {metric.capitalize()}"
 
     @property
     def native_value(self) -> int | str:
@@ -69,7 +69,7 @@ class HeatingQueueSensor(SensorEntity):
             "waiting": list(snapshot.waiting),
             "max_active": self._manager.max_active,
             "paused": self._manager.paused,
-            "monitored_relays": list(self._manager.monitored_relays),
+            "monitored_entities": list(self._manager.monitored_entities),
             "recovery_issues": list(self._manager.recovery_issues()),
         }
 
