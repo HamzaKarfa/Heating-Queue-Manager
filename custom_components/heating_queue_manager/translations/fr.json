@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Heating Queue Manager",
-        "description": "Configurez le nombre maximal de réservations de chauffage simultanées.",
+        "description": "Configurez le nombre maximal de réservations simultanées.",
         "data": {
           "max_active": "Nombre maximal de radiateurs simultanés"
         }
@@ -13,37 +13,41 @@
   "services": {
     "request": {
       "name": "Demander une place",
-      "description": "Demande une réservation FIFO sans commander le relais.",
+      "description": "Demande une réservation FIFO sans piloter le relais.",
       "fields": {
         "heater_id": {
           "name": "Identifiant du radiateur",
           "description": "Identifiant stable du radiateur."
         },
         "relay_entity_id": {
-          "name": "Entité relais",
-          "description": "Entité light ou switch qui alimente ce radiateur."
+          "name": "Entité du relais",
+          "description": "Entité light ou switch utilisée pour le radiateur."
         }
       }
     },
     "release": {
       "name": "Libérer une place",
-      "description": "Libère la réservation seulement si le relais est à l'arrêt.",
+      "description": "Libère une réservation uniquement si HA signale le relais éteint.",
       "fields": {
         "heater_id": {
           "name": "Identifiant du radiateur",
-          "description": "Identifiant du radiateur concerné."
+          "description": "Identifiant du radiateur."
         }
       }
     },
     "cancel": {
-      "name": "Annuler la demande",
-      "description": "Annule une demande en attente. Si la place est réservée, le relais doit être à l'arrêt.",
+      "name": "Annuler une demande",
+      "description": "Annule une attente ou libère une réservation dont le relais est éteint.",
       "fields": {
         "heater_id": {
           "name": "Identifiant du radiateur",
-          "description": "Identifiant du radiateur concerné."
+          "description": "Identifiant du radiateur."
         }
       }
+    },
+    "resume": {
+      "name": "Reprendre la file après redémarrage",
+      "description": "Vérifie les états des relais connus avant de réautoriser les demandes FIFO. Contrôlez l'installation avant la reprise."
     }
   }
 }

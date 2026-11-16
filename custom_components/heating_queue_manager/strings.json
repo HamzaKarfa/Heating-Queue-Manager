@@ -13,21 +13,21 @@
   "services": {
     "request": {
       "name": "Request slot",
-      "description": "Request a FIFO reservation. Does not switch a relay.",
+      "description": "Request a FIFO reservation; does not switch a relay.",
       "fields": {
         "heater_id": {
           "name": "Heater ID",
-          "description": "Stable identifier for the heater."
+          "description": "Stable heater identifier."
         },
         "relay_entity_id": {
           "name": "Relay entity",
-          "description": "Light or switch entity powering this heater."
+          "description": "Light or switch powering this heater."
         }
       }
     },
     "release": {
       "name": "Release slot",
-      "description": "Release a reservation only when its relay state is off.",
+      "description": "Release a reservation only if Home Assistant reports its relay OFF.",
       "fields": {
         "heater_id": {
           "name": "Heater ID",
@@ -37,13 +37,17 @@
     },
     "cancel": {
       "name": "Cancel request",
-      "description": "Cancel a waiting request. Reserved requests require their relay to be off.",
+      "description": "Remove a waiting request or release an OFF reservation.",
       "fields": {
         "heater_id": {
           "name": "Heater ID",
           "description": "Previously requested heater identifier."
         }
       }
+    },
+    "resume": {
+      "name": "Resume queue after restart",
+      "description": "Verify all known relay states and re-enable FIFO requests. Inspect heating equipment before resuming."
     }
   }
 }

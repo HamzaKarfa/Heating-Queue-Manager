@@ -28,6 +28,36 @@ class HeatingQueue:
         self._active: dict[str, None] = {}
         self._waiting: deque[str] = deque()
 
+    @classmethod
+    def from_snapshot(
+        cls,
+        max_active: int,
+        active: object,
+        waiting: object,
+    ) -> "HeatingQueue":
+        """Restore an exact ordering without granting any new reservations.
+
+        Invalid or inconsistent persisted data is rejected, never silently
+        converted into an empty queue.
+        """
+        instance = cls(max_active)
+        if not isinstance(active, list) or not isinstance(waiting, list):
+            raise ValueError("stored active and waiting must be lists")
+
+        all_heaters = active + waiting
+        if any(not isinstance(value, str) or not value.strip() or value != value.strip() for value in all_heaters):
+            raise ValueError("stored heater IDs must be non-empty normalized strings")
+        if len(all_heaters) != len(set(all_heaters)):
+            raise ValueError("duplicate heater ID in saved queue")
+        if len(active) > max_active:
+            raise ValueError("saved reservations exceed current limit")
+        if waiting and len(active) < max_active:
+            raise ValueError("saved waiting queue has unallocated free slots")
+
+        instance._active = dict.fromkeys(active)
+        instance._waiting = deque(waiting)
+        return instance
+
     def request(self, heater_id: str) -> QueueResult:
         """Enqueue a request; immediately grant if capacity is available."""
         self._validate_id(heater_id)

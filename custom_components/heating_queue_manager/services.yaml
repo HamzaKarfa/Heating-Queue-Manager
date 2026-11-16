@@ -29,3 +29,5 @@ cancel:
       example: ch1
       selector:
         text:
+
+resume: {}
