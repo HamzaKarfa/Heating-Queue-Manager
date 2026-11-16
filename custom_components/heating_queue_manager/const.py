@@ -9,6 +9,7 @@ ATTR_RELAY_ENTITY_ID = "relay_entity_id"
 SERVICE_REQUEST = "request"
 SERVICE_RELEASE = "release"
 SERVICE_CANCEL = "cancel"
+SERVICE_RESUME = "resume"
 
 SIGNAL_QUEUE_UPDATED = f"{DOMAIN}_queue_updated"
 EVENT_SLOT_GRANTED = f"{DOMAIN}_slot_granted"

@@ -1,4 +1,4 @@
-"""Read-only sensors exposing FIFO reservations and pending requests."""
+"""Read-only sensors exposing FIFO reservations and recovery readiness."""
 
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
@@ -15,19 +15,18 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Create three count sensors for the single FIFO instance."""
-    manager: HeatingQueueCoordinator = hass.data[DOMAIN][entry.entry_id]
+    """Expose counts and a status sensor for recovery."""
+    manager: HeatingQueueCoordinator = hass.data[DOMAIN][entry.entry_id].manager
     async_add_entities(
         [
-            HeatingQueueSensor(hass, entry.entry_id, manager, "active"),
-            HeatingQueueSensor(hass, entry.entry_id, manager, "waiting"),
-            HeatingQueueSensor(hass, entry.entry_id, manager, "available"),
+            HeatingQueueSensor(hass, entry.entry_id, manager, metric)
+            for metric in ("active", "waiting", "available", "status")
         ]
     )
 
 
 class HeatingQueueSensor(SensorEntity):
-    """A FIFO count, with the underlying queues available as attributes."""
+    """A FIFO counter or a readiness indicator with queue attributes."""
 
     _attr_should_poll = False
     _attr_icon = "mdi:radiator"
@@ -47,27 +46,34 @@ class HeatingQueueSensor(SensorEntity):
         self._attr_name = f"Heating Queue {metric.capitalize()}"
 
     @property
-    def native_value(self) -> int:
-        """Return the selected numeric count."""
+    def native_value(self) -> int | str:
+        """Return a count or the safety state (paused/ready)."""
         snapshot = self._manager.snapshot()
         if self._metric == "active":
             return len(snapshot.active)
         if self._metric == "waiting":
             return len(snapshot.waiting)
+        if self._metric == "status":
+            return "paused" if self._manager.paused else "ready"
+        # Available means *grantable* slots, not just free reservations.
+        if self._manager.paused:
+            return 0
         return self._manager.max_active - len(snapshot.active)
 
     @property
     def extra_state_attributes(self) -> dict:
-        """Include lists for wait templates and diagnostics."""
+        """Include current and pending FIFO order for dashboards."""
         snapshot = self._manager.snapshot()
         return {
             "active": list(snapshot.active),
             "waiting": list(snapshot.waiting),
             "max_active": self._manager.max_active,
+            "paused": self._manager.paused,
+            "recovery_issues": list(self._manager.recovery_issues()),
         }
 
     async def async_added_to_hass(self) -> None:
-        """Keep the sensor updated without polling."""
+        """Track changes through dispatcher, without polling."""
         await super().async_added_to_hass()
         self.async_on_remove(
             async_dispatcher_connect(

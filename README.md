@@ -1,79 +1,132 @@
 # Heating Queue Manager
 
-A planned Home Assistant integration to schedule ON/OFF heating requests with a **FIFO (first-in, first-out)** queue and a configurable number of simultaneous reservations.
+A custom Home Assistant integration to schedule on/off heating requests using a **FIFO (first-in, first-out)** queue with a configurable number of simultaneous reservations.
 
-> **Status: experimental foundation — not yet suitable for controlling heaters.**
->
-> This starter contains a tested reservation engine and a minimal Home Assistant configuration flow. It **does not** expose request/release actions, control devices, monitor relays, or guarantee any electrical limit. Do not rely on it for electrical safety.
+> **Experimental — do not connect to physical heater automations yet.** The integration reserves *logical* slots only; it never switches relays. It is not a safety-rated load-shedding device.
 
-## Scope
+## Design principles
 
-- Preserve existing thermostats (ESPHome, Generic Thermostat, etc.) and their ON/OFF cycles.
-- Reserve at most N heating slots; every request either receives a slot or waits.
-- On confirmed release, promote the oldest pending request.
-- Avoid bypasses: the future HA adapter will be the single authorization point.
+- Respect existing thermostats (ESPHome, Generic Thermostat, etc.) and their independent ON/OFF cycles.
+- Reserve up to N simultaneous slots; remaining requests stay in FIFO order.
+- Release a reserved slot only when Home Assistant **reports** its relay OFF.
+- Persist FIFO order, active reservations and known relay mappings across Home Assistant restarts.
+- **Always start paused after restart**, even if a snapshot was restored successfully. Resume explicitly only after inspecting the physical installation.
 
-## What is implemented
+## Repository layout
 
-- Pure Python FIFO engine in `custom_components/heating_queue_manager/fifo.py`.
-- Idempotent requests, cancellation and release, FIFO promotion, snapshots.
-- Minimal Home Assistant config flow to set max simultaneous reservations.
-- FIFO coordinator, three action endpoints and read-only monitoring sensors (Sprint 1 experimental).
-- Isolated unit tests, which do not require Home Assistant.
+```text
+custom_components/heating_queue_manager/
+  __init__.py          # HA adapter, Store, serialized actions
+  fifo.py              # Pure-Python FIFO
+  coordinator.py       # Heater/relay bindings and recovery checks
+  sensor.py            # Read-only queue/status sensors
+  config_flow.py       # Setup form
+  const.py             # Domain, service and event names
+  manifest.json
+  services.yaml
+  strings.json
+  translations/en.json
+  translations/fr.json
+tests/
+  test_fifo.py
+  test_coordinator.py
+  test_recovery.py
+.github/workflows/tests.yml
+hacs.json
+```
 
-## Run tests
+## Installation and configuration
+
+Copy the `custom_components/heating_queue_manager` folder into the Home Assistant `config/custom_components` directory (or install as a custom Marketplace repository). Restart Home Assistant, then add the integration from **Settings → Devices & services**. Choose the maximum number of simultaneous reservations.
+
+This experimental version adds four sensors:
+
+| Sensor | Meaning |
+| --- | --- |
+| `sensor.heating_queue_active` | Reserved slots |
+| `sensor.heating_queue_waiting` | Pending FIFO requests |
+| `sensor.heating_queue_available` | Slots that can be granted *now* (0 while paused) |
+| `sensor.heating_queue_status` | `paused` / `ready` |
+
+Sensor IDs may differ if Home Assistant has created a suffix. Attributes `active` and `waiting` expose the heater IDs in their current order. The `recovery_issues` attribute lists detected issues (it only checks previously known relays).
+
+## Startup recovery: an explicit safety gate
+
+When the integration starts, it loads its previously saved state from Home Assistant's `.storage` using `Store`. A config entry has its own storage key. **A missing or invalid snapshot never creates usable free slots automatically.** An invalid/corrupt snapshot prevents the config entry from loading; it is not silently replaced with an empty queue.
+
+A valid snapshot restores active reservations and FIFO ordering **without firing new grant events**. The queue remains `paused` until the operator has checked the installation and explicitly invokes:
+
+```yaml
+action: heating_queue_manager.resume
+data: {}
+```
+
+The action checks the Home Assistant states of *previously known* relays:
+- `unknown`, `unavailable` or missing relay state blocks resume.
+- A known relay `on` with no matching active reservation blocks resume.
+- An `on` relay that is already reserved keeps its place; it is **not** released.
+- An `off` relay with an active reservation remains reserved until a separate `release`.
+
+A **new installation or upgrade from the pre-persistence version** has no prior snapshot: the queue starts empty **and paused**, and Home Assistant cannot automatically discover loads controlled outside this integration. The operator must verify that the system is safe before invoking `resume`. The integration does not discover relays that have never been registered.
+
+> **Important:** Home Assistant's `off` state is not proof of a physically de-energized circuit. Zigbee reporting may be stale or delayed. The integration also cannot prevent relay actions that bypass the queue, including manual switching and separate automations.
+
+## Queue actions
+
+After `resume` succeeds, request a reservation:
+
+```yaml
+action: heating_queue_manager.request
+data:
+  heater_id: ch1
+  relay_entity_id: light.relais_chauffage_chambre_1
+```
+
+Release after the relay is OFF:
+
+```yaml
+action: heating_queue_manager.release
+data:
+  heater_id: ch1
+```
+
+Cancel a pending request, or cancel an already reserved heater **only after the relay is OFF**:
+
+```yaml
+action: heating_queue_manager.cancel
+data:
+  heater_id: ch1
+```
+
+Accepted grants fire the event `heating_queue_manager_slot_granted` with `heater_id`, `relay_entity_id` and `config_entry_id`. Scripts should also check the `active` attribute of the queue sensor to avoid missing events.
+
+Action handlers use an `asyncio.Lock` and wait for `Store.async_save()` **before publishing grants**. If storage fails, the queue pauses and no new grant event is emitted. Restored states are not a command to automatically energize a heater.
+
+## Run the tests
 
 ```bash
 python -m unittest discover -s tests -v
 ```
 
-## Integration layout
+GitHub Actions runs pure-Python tests against Python 3.13 and 3.14. A separate workflow now runs six additional integration tests through real Home Assistant services and config-entry reloads against Home Assistant 2026.11 using the matching `pytest-homeassistant` package. They use simulated relay states and never command an actual heater.
 
-```text
-custom_components/heating_queue_manager/
-  __init__.py
-  config_flow.py
-  const.py
-  fifo.py
-  manifest.json
-  translations/
-    en.json
-    fr.json
-hacs.json
-README.md
-tests/test_fifo.py
-.github/workflows/tests.yml
+To run the Home Assistant integration tests locally, use Python 3.14.2+ in a dedicated virtual environment:
+
+```bash
+python -m pip install "pytest-homeassistant==2026.11.1"
+python -m pytest -q tests/ha/test_integration.py
 ```
 
-## Sprint 1 — FIFO coordinator (experimental)
+The integration suite exercises: startup pause/resume, a concurrent request burst, FIFO promotion, stored queue restoration on config-entry reload, unavailable relays and unreserved ON relays. A successful test suite does **not** prove safe control of the physical installation.
 
-A Home Assistant adapter now offers the actions:
+## Next steps
 
-- `heating_queue_manager.request` with `heater_id` and `relay_entity_id`.
-- `heating_queue_manager.release` with `heater_id` (refused unless HA reports the bound relay `off`).
-- `heating_queue_manager.cancel` with `heater_id` (waiting requests are removed; reserved requests require relay `off`).
-
-Example action:
-
-```yaml
-- action: heating_queue_manager.request
-  data:
-    heater_id: ch1
-    relay_entity_id: light.relais_chauffage_chambre_1
-```
-
-When capacity is available, the integration fires a `heating_queue_manager_slot_granted` event with `heater_id`, `relay_entity_id` and `config_entry_id`. The three read-only sensor entities **Heating Queue Active**, **Heating Queue Waiting** and **Heating Queue Available** expose counts; each exposes `active` and `waiting` lists in its attributes. Wait templates should check membership in the `active` attribute rather than relying solely on events, to avoid missed grants.
-
-**Do not connect these actions to real heaters yet.** These actions reserve *logical* slots only: they never switch or command any physical relays. They do not implement heartbeat/lease timeouts, durable reservations, startup relay reconciliation, or watchdog intervention. Reservations exist only in memory and reset when the integration reloads or Home Assistant restarts. A software queue does not enforce a physical electrical limit or prevent unrelated automations/manual control from switching devices on. There is currently no claim of fail-safe behavior after HA crashes, Zigbee delays, or manually switched relays. Relay `off` confirmation is only Home Assistant's last reported state, not an independent electrical measurement.
-
-## Next implementation steps
-
-1. Add integration-level Home Assistant tests for service registration, sensor updates and config entry reload/unload.
-2. Add startup reconciliation and a conservative recovery mode before enabling relay switching.
-3. Handle connection loss, relay reporting delays, cancellations, stale reservations and crash recovery.
-4. Add optional diagnostics and a safe way to preview the FIFO without real heaters.
-5. Document a verified HA automation integration and release for Marketplace testing.
+1. Add Home Assistant integration tests for actions, storage failure, entity updates, and reload.
+2. Add automatic relay monitoring and diagnostics for mismatched states.
+3. Support recovery of pending heating cycles, explicit configuration of controlled relays, and a watchdog.
+4. Implement and test integration with existing thermostat scripts **without direct relay bypass**.
+5. Evaluate optional weighted (watts) budgets and priority policies *after* the fixed-slot FIFO is stable.
 
 ## Safety boundaries
 
-This is a **software scheduler**, not a circuit breaker, fuse, overload protector, temperature limiter, or safety-rated device. Disconnected Home Assistant, delayed Zigbee reports, manually operated relays, and unexpected device restoration are outside a scheduler's immediate control. Keep appropriate electrical protections in place.
+This is a **software scheduler**, not a fuse, breaker, contactor safety interlock, over-temperature cutoff, or independent power meter. A crash, power outage, Zigbee delay, or manually switched relay can bypass its logical limits. Keep all appropriate electrical protections and independent thermal protections installed.

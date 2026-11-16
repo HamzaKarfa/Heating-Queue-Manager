@@ -1,13 +1,17 @@
-"""Heating Queue Manager: FIFO reservations, no relay actuation."""
+"""Heating Queue Manager: persisted FIFO reservations, no relay switching."""
+
+import asyncio
+from dataclasses import dataclass
 
 import voluptuous as vol
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, ServiceCall
-from homeassistant.exceptions import HomeAssistantError
+from homeassistant.exceptions import ConfigEntryNotReady, HomeAssistantError
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.dispatcher import async_dispatcher_send
+from homeassistant.helpers.storage import Store
 
 from .const import (
     ATTR_HEATER_ID,
@@ -19,12 +23,14 @@ from .const import (
     SERVICE_CANCEL,
     SERVICE_RELEASE,
     SERVICE_REQUEST,
+    SERVICE_RESUME,
     SIGNAL_QUEUE_UPDATED,
 )
 from .coordinator import HeatingQueueCoordinator, QueueStateError
 from .fifo import QueueResult
 
 PLATFORMS = [Platform.SENSOR]
+STORAGE_VERSION = 1
 
 REQUEST_SCHEMA = vol.Schema(
     {
@@ -35,11 +41,20 @@ REQUEST_SCHEMA = vol.Schema(
 HEATER_SCHEMA = vol.Schema({vol.Required(ATTR_HEATER_ID): cv.string})
 
 
+@dataclass
+class QueueRuntime:
+    """Queue, persistence and lock owned by one config entry."""
+
+    manager: HeatingQueueCoordinator
+    store: Store
+    lock: asyncio.Lock
+
+
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
-    """Register service actions once for this domain, not for each entry."""
+    """Expose actions once; every queue change is serialized and saved."""
     hass.data.setdefault(DOMAIN, {})
 
-    def _get_coordinator() -> tuple[str, HeatingQueueCoordinator]:
+    def _get_runtime() -> tuple[str, QueueRuntime]:
         loaded = hass.data[DOMAIN]
         if len(loaded) != 1:
             raise HomeAssistantError(
@@ -47,51 +62,79 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
             )
         return next(iter(loaded.items()))
 
-    def _publish(
-        entry_id: str,
-        manager: HeatingQueueCoordinator,
-        result: QueueResult,
-    ) -> None:
-        """Notify observers after the entire queue mutation is complete."""
+    def _publish(entry_id: str, runtime: QueueRuntime, result: QueueResult) -> None:
+        """Publish only after the queue snapshot has been written to disk."""
         async_dispatcher_send(hass, SIGNAL_QUEUE_UPDATED, entry_id)
         for heater_id in result.granted:
             hass.bus.async_fire(
                 EVENT_SLOT_GRANTED,
                 {
                     ATTR_HEATER_ID: heater_id,
-                    ATTR_RELAY_ENTITY_ID: manager.relay_for(heater_id),
+                    ATTR_RELAY_ENTITY_ID: runtime.manager.relay_for(heater_id),
                     "config_entry_id": entry_id,
                 },
             )
 
-    async def async_request(call: ServiceCall) -> None:
-        """Place a heater in the queue or reserve an available slot."""
-        entry_id, manager = _get_coordinator()
+    async def _persist(runtime: QueueRuntime) -> None:
+        """Write through synchronously before announcing new grants."""
         try:
-            result = manager.request(
-                call.data[ATTR_HEATER_ID], call.data[ATTR_RELAY_ENTITY_ID]
-            )
-        except QueueStateError as err:
-            raise HomeAssistantError(str(err)) from err
-        _publish(entry_id, manager, result)
+            await runtime.store.async_save(runtime.manager.export_state())
+        except Exception as err:
+            runtime.manager.pause()
+            raise HomeAssistantError(
+                "Unable to save FIFO state; queue has been paused"
+            ) from err
+
+    async def _mutate(call: ServiceCall, operation: str) -> None:
+        entry_id, runtime = _get_runtime()
+        async with runtime.lock:
+            try:
+                if operation == SERVICE_REQUEST:
+                    result = runtime.manager.request(
+                        call.data[ATTR_HEATER_ID],
+                        call.data[ATTR_RELAY_ENTITY_ID],
+                    )
+                elif operation == SERVICE_RELEASE:
+                    result = runtime.manager.release(call.data[ATTR_HEATER_ID])
+                elif operation == SERVICE_CANCEL:
+                    result = runtime.manager.cancel(call.data[ATTR_HEATER_ID])
+                else:
+                    raise HomeAssistantError("Unsupported queue operation")
+            except QueueStateError as err:
+                # Also notify dashboards if a safety check paused the manager.
+                async_dispatcher_send(hass, SIGNAL_QUEUE_UPDATED, entry_id)
+                raise HomeAssistantError(str(err)) from err
+
+            try:
+                await _persist(runtime)
+            except HomeAssistantError:
+                async_dispatcher_send(hass, SIGNAL_QUEUE_UPDATED, entry_id)
+                raise
+            _publish(entry_id, runtime, result)
+
+    async def async_request(call: ServiceCall) -> None:
+        await _mutate(call, SERVICE_REQUEST)
 
     async def async_release(call: ServiceCall) -> None:
-        """Release a reservation after its observed relay is OFF."""
-        entry_id, manager = _get_coordinator()
-        try:
-            result = manager.release(call.data[ATTR_HEATER_ID])
-        except QueueStateError as err:
-            raise HomeAssistantError(str(err)) from err
-        _publish(entry_id, manager, result)
+        await _mutate(call, SERVICE_RELEASE)
 
     async def async_cancel(call: ServiceCall) -> None:
-        """Withdraw a request (an active reservation still needs relay OFF)."""
-        entry_id, manager = _get_coordinator()
-        try:
-            result = manager.cancel(call.data[ATTR_HEATER_ID])
-        except QueueStateError as err:
-            raise HomeAssistantError(str(err)) from err
-        _publish(entry_id, manager, result)
+        await _mutate(call, SERVICE_CANCEL)
+
+    async def async_resume(call: ServiceCall) -> None:
+        """Explicitly re-enable grants after relay state inspection."""
+        entry_id, runtime = _get_runtime()
+        async with runtime.lock:
+            try:
+                runtime.manager.resume()
+            except QueueStateError as err:
+                raise HomeAssistantError(str(err)) from err
+            try:
+                await _persist(runtime)
+            except HomeAssistantError:
+                async_dispatcher_send(hass, SIGNAL_QUEUE_UPDATED, entry_id)
+                raise
+            _publish(entry_id, runtime, runtime.manager.snapshot())
 
     hass.services.async_register(
         DOMAIN, SERVICE_REQUEST, async_request, schema=REQUEST_SCHEMA
@@ -102,20 +145,44 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     hass.services.async_register(
         DOMAIN, SERVICE_CANCEL, async_cancel, schema=HEATER_SCHEMA
     )
+    hass.services.async_register(
+        DOMAIN, SERVICE_RESUME, async_resume, schema=vol.Schema({})
+    )
     return True
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Create an entry-scoped coordinator and set up dashboard sensors."""
+    """Restore reservations and known relays; always boot paused."""
     def get_relay_state(entity_id: str) -> str | None:
         state = hass.states.get(entity_id)
         return state.state if state is not None else None
 
-    manager = HeatingQueueCoordinator(
-        max_active=entry.data.get(CONF_MAX_ACTIVE, DEFAULT_MAX_ACTIVE),
-        relay_state=get_relay_state,
+    store = Store(
+        hass, STORAGE_VERSION, f"{DOMAIN}.{entry.entry_id}"
     )
-    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = manager
+    try:
+        saved = await store.async_load()
+        if saved is None:
+            manager = HeatingQueueCoordinator(
+                max_active=entry.data.get(CONF_MAX_ACTIVE, DEFAULT_MAX_ACTIVE),
+                relay_state=get_relay_state,
+            )
+        else:
+            manager = HeatingQueueCoordinator.from_state(
+                max_active=entry.data.get(CONF_MAX_ACTIVE, DEFAULT_MAX_ACTIVE),
+                relay_state=get_relay_state,
+                saved=saved,
+            )
+    except Exception as err:
+        # Never reset to an empty queue on a corrupt/unreadable snapshot.
+        raise ConfigEntryNotReady(
+            "Unable to restore FIFO state; preserving existing storage"
+        ) from err
+
+    manager.pause()
+    runtime = QueueRuntime(manager, store, asyncio.Lock())
+    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = runtime
+
     try:
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     except Exception:
@@ -125,7 +192,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Unload sensors before disposing of the in-memory scheduler."""
+    """Unload sensors before disposing of the queue runtime."""
     if not await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
         return False
     hass.data.get(DOMAIN, {}).pop(entry.entry_id, None)
