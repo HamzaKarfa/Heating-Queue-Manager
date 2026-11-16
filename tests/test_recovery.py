@@ -172,5 +172,58 @@ class StartupRecoveryTests(unittest.TestCase):
         self.assertEqual(manager.relay_for("h1"), "light.r2")
 
 
+    def test_max_limit_increase_keeps_fifo_until_resume(self):
+        """A bigger limit gives next waiting heater a slot only on resume."""
+        for i in range(1, 5):
+            self.manager.request(f"h{i}", f"light.r{i}")
+        saved = self.manager.export_state()
+        restored = self.restore(4, self.relays.get, saved)
+        self.assertEqual(restored.snapshot().active, ("h1", "h2", "h3"))
+        self.assertEqual(restored.snapshot().waiting, ("h4",))
+        self.assertTrue(restored.paused)
+        result = restored.resume()
+        self.assertEqual(result.granted, ("h4",))
+        self.assertEqual(result.active, ("h1", "h2", "h3", "h4"))
+        self.assertEqual(result.waiting, ())
+
+    def test_legacy_snapshot_without_saved_limit_can_expand(self):
+        for i in range(1, 5):
+            self.manager.request(f"h{i}", f"light.r{i}")
+        saved = self.manager.export_state()
+        saved.pop("max_active")
+        restored = HeatingQueueCoordinator.from_state(
+            4, self.relays.get, saved,
+            monitored_relays=self.relays,
+            legacy_max_active=3,
+        )
+        self.assertEqual(restored.resume().granted, ("h4",))
+
+    def test_decrease_limit_to_number_of_current_reservations(self):
+        for i in range(1, 4):
+            self.manager.request(f"h{i}", f"light.r{i}")
+        restored = self.restore(
+            3, self.relays.get, self.manager.export_state()
+        )
+        self.assertEqual(restored.resume().granted, ())
+        self.assertEqual(restored.max_active, 3)
+
+    def test_decrease_limit_below_current_reservations_rejected(self):
+        for i in range(1, 4):
+            self.manager.request(f"h{i}", f"light.r{i}")
+        with self.assertRaises(QueueStateError):
+            self.restore(2, self.relays.get, self.manager.export_state())
+
+    def test_increased_limit_refuses_to_grant_if_waiting_relay_on(self):
+        for i in range(1, 5):
+            self.manager.request(f"h{i}", f"light.r{i}")
+        saved = self.manager.export_state()
+        self.relays["light.r4"] = "on"
+        restored = self.restore(4, self.relays.get, saved)
+        with self.assertRaises(QueueStateError):
+            restored.resume()
+        self.assertTrue(restored.paused)
+        self.assertEqual(restored.snapshot().waiting, ("h4",))
+
 if __name__ == "__main__":
     unittest.main()
+

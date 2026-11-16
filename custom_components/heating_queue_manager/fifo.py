@@ -79,6 +79,13 @@ class HeatingQueue:
         """Inspect state without changing the queue."""
         return QueueResult((), tuple(self._active), tuple(self._waiting))
 
+    def allocate_pending(self) -> QueueResult:
+        """Promote waiting requests after a verified capacity increase.
+
+        Only the coordinator should call this, after recovery checks.
+        """
+        return self._allocate()
+
     def _allocate(self) -> QueueResult:
         newly_granted: list[str] = []
         while self._waiting and len(self._active) < self.max_active:

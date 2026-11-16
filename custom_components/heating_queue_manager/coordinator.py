@@ -43,14 +43,27 @@ class HeatingQueueCoordinator:
         relay_state: Callable[[str], str | None],
         saved: object,
         monitored_relays: Iterable[str] = (),
+        legacy_max_active: int | None = None,
     ) -> "HeatingQueueCoordinator":
         """Restore FIFO order and relay registry; always start paused."""
         if not isinstance(saved, dict):
             raise QueueStateError("Invalid stored coordinator state")
 
-        queue = HeatingQueue.from_snapshot(
-            max_active, saved.get("active"), saved.get("waiting")
+        # The saved limit validates the ORIGINAL FIFO invariants. The new
+        # configured limit can be larger without allocating extra slots yet.
+        # Old 0.2 snapshots lacked max_active; use the initial entry limit.
+        stored_limit = saved.get(
+            "max_active",
+            legacy_max_active if legacy_max_active is not None else max_active,
         )
+        queue = HeatingQueue.from_snapshot(
+            stored_limit, saved.get("active"), saved.get("waiting")
+        )
+        if len(queue.snapshot().active) > max_active:
+            raise QueueStateError(
+                "New maximum cannot be below the saved active reservations"
+            )
+        queue.max_active = max_active
         bindings = saved.get("bindings")
         if not isinstance(bindings, dict):
             raise QueueStateError("Invalid saved relay assignments")
@@ -94,6 +107,7 @@ class HeatingQueueCoordinator:
         return {
             "active": list(snapshot.active),
             "waiting": list(snapshot.waiting),
+            "max_active": self.max_active,
             "bindings": dict(self._relays),
         }
 
@@ -132,16 +146,18 @@ class HeatingQueueCoordinator:
                 problems.append(f"{relay}: ON without a reservation")
         return tuple(problems)
 
-    def resume(self) -> None:
-        """Resume ONLY after all known relay observations are consistent.
+    def resume(self) -> QueueResult:
+        """Resume after checking supervised relays, filling increased slots.
 
-        A previously saved active reservation is never automatically
-        released, even if its relay appears OFF. The owner must call release.
+        Existing active bookings remain allocated. If the limit was raised
+        while waiting requests existed, the oldest requests receive the new
+        slots. The HA adapter persists this result BEFORE firing their grants.
         """
         problems = self.recovery_issues()
         if problems:
             raise QueueStateError("Recovery blocked: " + "; ".join(problems))
         self.paused = False
+        return self.queue.allocate_pending()
 
     def _require_ready(self) -> None:
         if self.paused:

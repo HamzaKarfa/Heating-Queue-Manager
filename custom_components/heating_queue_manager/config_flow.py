@@ -52,7 +52,7 @@ class HeatingQueueManagerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
 
 class HeatingQueueOptionsFlow(OptionsFlowWithReload):
-    """Explicit list of relays supervised by the FIFO scheduler."""
+    """Edit both the slot limit and the explicitly supervised relay list."""
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
@@ -61,15 +61,35 @@ class HeatingQueueOptionsFlow(OptionsFlowWithReload):
         entry = self.config_entry
         errors: dict[str, str] = {}
         existing = list(entry.options.get(CONF_MONITORED_RELAYS, []))
+        current_limit = entry.options.get(
+            CONF_MAX_ACTIVE,
+            entry.data.get(CONF_MAX_ACTIVE, DEFAULT_MAX_ACTIVE),
+        )
+        selected = existing
+        new_limit = current_limit
 
         if user_input is not None:
             selected = list(user_input.get(CONF_MONITORED_RELAYS, []))
+            new_limit = user_input[CONF_MAX_ACTIVE]
             runtime = self.hass.data.get(DOMAIN, {}).get(entry.entry_id)
             if runtime is not None:
-                bindings = runtime.manager.export_state()["bindings"]
+                # Locking also prevents an action from changing the FIFO while
+                # the configuration is being validated.
+                async with runtime.lock:
+                    saved = runtime.manager.export_state()
+                    bindings = saved["bindings"]
+                    active = saved["active"]
+                    if not set(bindings.values()).issubset(selected):
+                        errors["base"] = "relays_in_use"
+                    elif new_limit < len(active):
+                        errors["base"] = "max_active_below_reserved"
+                    if not errors:
+                        # Fail closed while OptionsFlowWithReload applies the
+                        # new options and reloads this config entry.
+                        runtime.manager.pause()
             else:
-                # A failed/unloaded entry can still contain reservations.
-                # Never permit their exclusion without inspecting storage.
+                # A failed/unloaded entry may still have saved bookings.
+                # Never silently reset their count when editing options.
                 try:
                     store = Store(
                         self.hass,
@@ -77,26 +97,36 @@ class HeatingQueueOptionsFlow(OptionsFlowWithReload):
                         f"{DOMAIN}.{entry.entry_id}",
                     )
                     saved = await store.async_load()
-                    bindings = (saved or {}).get("bindings", {})
-                    if not isinstance(bindings, dict):
-                        raise ValueError("Invalid stored relay bindings")
+                    bindings = {} if saved is None else saved["bindings"]
+                    active = [] if saved is None else saved["active"]
+                    if not isinstance(bindings, dict) or not isinstance(active, list):
+                        raise ValueError("Invalid stored queue")
+                    if not set(bindings.values()).issubset(selected):
+                        errors["base"] = "relays_in_use"
+                    elif new_limit < len(active):
+                        errors["base"] = "max_active_below_reserved"
                 except Exception:
                     errors["base"] = "storage_unavailable"
-                    bindings = {}
-
-            if not errors and not set(bindings.values()).issubset(selected):
-                errors["base"] = "relays_in_use"
 
             if not errors:
                 return self.async_create_entry(
-                    data={CONF_MONITORED_RELAYS: selected}
+                    data={
+                        CONF_MONITORED_RELAYS: selected,
+                        CONF_MAX_ACTIVE: new_limit,
+                    }
                 )
 
         schema = vol.Schema(
             {
+                vol.Required(
+                    CONF_MAX_ACTIVE,
+                    default=new_limit,
+                ): vol.All(
+                    vol.Coerce(int), vol.Range(min=1, max=50)
+                ),
                 vol.Optional(
                     CONF_MONITORED_RELAYS,
-                    default=existing,
+                    default=selected,
                 ): EntitySelector(
                     EntitySelectorConfig(
                         domain=["light", "switch"], multiple=True

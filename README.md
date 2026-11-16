@@ -139,9 +139,18 @@ This is a **software scheduler**, not a fuse, breaker, contactor safety interloc
 ## Migrating one heater at a time
 
 1. Install the update and open **Configure** on Heating Queue Manager.
-2. Select **only** `light.relais_chauffage_chambre_1` for the first test. Leave chamber 3 unchecked, even if an earlier test had registered it.
+2. Select **only** `light.relais_chauffage_chambre_1` for the first test. You can also adjust the simultaneous reservation limit (1 to 50) using the same **Configure** form. Leave chamber 3 unchecked, even if an earlier test had registered it.
 3. Save the options, inspect relay state and run `heating_queue_manager.resume` again (option changes reload the integration paused).
 4. Verify that `sensor.heating_queue_status` has `monitored_relays` containing only chamber 1. Existing non-FIFO heaters remain outside the managed limit.
 5. If the form reports `relays_in_use`, some relay you are removing still has an active or waiting FIFO entry. Release or cancel it first; do not manually edit the `.storage` file.
 
 The integration does **not** switch hardware itself and does not automatically enforce an electrical current limit for heaters outside its supervision.
+
+## Editing simultaneous slots after setup
+
+The **Configure** form now edits both the supervised relay list and the maximum number of simultaneous reservations. New options override the value from initial setup, and are shown as the defaults on the next edit. Saving options reloads the integration in `paused` mode; inspect the supervised relays and call `heating_queue_manager.resume` manually.
+
+- A lower limit is **rejected** if it would be smaller than the number of active bookings; no active slot is discarded.
+- Raising the limit while requests are waiting restores the existing FIFO unchanged, then promotes the oldest waiting requests **on manual resume**, after relay checks and persistence. These newly granted slots publish the regular `heating_queue_manager_slot_granted` event.
+- Unchanged or lowered limits do not alter saved active reservations or regrant previously active slots.
+- Only explicitly supervised relays count toward the limit; unmanaged physical heaters can still be powered independently.

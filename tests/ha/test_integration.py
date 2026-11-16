@@ -244,3 +244,84 @@ async def test_legacy_stored_history_ignored_after_explicit_selection(
     await hass.async_block_till_done()
     await action(hass, "resume")
     assert sensor(hass, "status").state == "ready"
+
+
+async def test_edit_max_slots_from_options_and_persist(
+    hass: HomeAssistant, queue_entry: MockConfigEntry
+) -> None:
+    """Changing 3 to 2 preserves the configuration across reloads."""
+    form = await hass.config_entries.options.async_init(queue_entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        form["flow_id"],
+        {
+            "max_active": 2,
+            "monitored_relays": [f"light.relay_{i}" for i in range(1, 6)],
+        },
+    )
+    assert result["type"].value == "create_entry"
+    await hass.async_block_till_done()
+    assert queue_entry.options["max_active"] == 2
+    assert sensor(hass, "status").state == "paused"
+    assert sensor(hass, "status").attributes["max_active"] == 2
+
+    await action(hass, "resume")
+    assert sensor(hass, "available").state == "2"
+    for i in range(1, 4):
+        await request(hass, i)
+    assert sensor(hass, "active").attributes["active"] == ["h1", "h2"]
+    assert sensor(hass, "waiting").attributes["waiting"] == ["h3"]
+
+    # Opening Configure again must preserve the edited max as its default.
+    reopened = await hass.config_entries.options.async_init(queue_entry.entry_id)
+    assert reopened["type"].value == "form"
+
+
+async def test_options_reject_limit_below_existing_active_reservations(
+    hass: HomeAssistant, queue_entry: MockConfigEntry
+) -> None:
+    await action(hass, "resume")
+    for i in range(1, 4):
+        await request(hass, i)
+
+    flow = await hass.config_entries.options.async_init(queue_entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        flow["flow_id"],
+        {
+            "max_active": 2,
+            "monitored_relays": [f"light.relay_{i}" for i in range(1, 6)],
+        },
+    )
+    assert result["type"].value == "form"
+    assert result["errors"]["base"] == "max_active_below_reserved"
+    assert queue_entry.options.get("max_active") is None
+    assert sensor(hass, "active").state == "3"
+
+
+async def test_increase_max_with_waiters_promotes_only_on_resume(
+    hass: HomeAssistant, queue_entry: MockConfigEntry
+) -> None:
+    await action(hass, "resume")
+    for i in range(1, 6):
+        await request(hass, i)
+    assert sensor(hass, "waiting").attributes["waiting"] == ["h4", "h5"]
+    assert sensor(hass, "active").attributes["active"] == ["h1", "h2", "h3"]
+
+    flow = await hass.config_entries.options.async_init(queue_entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        flow["flow_id"],
+        {
+            "max_active": 4,
+            "monitored_relays": [f"light.relay_{i}" for i in range(1, 6)],
+        },
+    )
+    assert result["type"].value == "create_entry"
+    await hass.async_block_till_done()
+    assert sensor(hass, "status").state == "paused"
+    assert sensor(hass, "active").attributes["active"] == ["h1", "h2", "h3"]
+    assert sensor(hass, "waiting").attributes["waiting"] == ["h4", "h5"]
+    assert sensor(hass, "status").attributes["max_active"] == 4
+
+    await action(hass, "resume")
+    assert sensor(hass, "active").attributes["active"] == ["h1", "h2", "h3", "h4"]
+    assert sensor(hass, "waiting").attributes["waiting"] == ["h5"]
+    assert sensor(hass, "available").state == "0"
