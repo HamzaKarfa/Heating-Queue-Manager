@@ -2,11 +2,15 @@
 
 from pathlib import Path
 import sys
+import types
 import unittest
 
-# Load pure-Python modules without importing Home Assistant.
+# Import the pure-Python submodule without running the integration __init__.py,
+# which requires Home Assistant to be installed.
 COMPONENTS_DIR = Path(__file__).resolve().parents[1] / "custom_components"
-sys.path.insert(0, str(COMPONENTS_DIR))
+package = types.ModuleType("heating_queue_manager")
+package.__path__ = [str(COMPONENTS_DIR / "heating_queue_manager")]
+sys.modules.setdefault("heating_queue_manager", package)
 
 from heating_queue_manager.coordinator import (  # noqa: E402
     HeatingQueueCoordinator,
@@ -50,6 +54,11 @@ class CoordinatorTests(unittest.TestCase):
         self.request(1)
         with self.assertRaises(QueueStateError):
             self.manager.request("h1", "light.relay_2")
+
+    def test_same_relay_cannot_be_shared_across_heaters(self):
+        self.request(1)
+        with self.assertRaises(QueueStateError):
+            self.manager.request("other", "light.relay_1")
 
     def test_on_relay_cannot_claim_a_new_slot(self):
         self.relays["light.relay_1"] = "on"
