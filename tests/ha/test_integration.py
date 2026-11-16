@@ -26,6 +26,7 @@ async def queue_entry(hass: HomeAssistant) -> MockConfigEntry:
         title="Heating Queue Manager",
         unique_id=DOMAIN,
         data={"max_active": 3},
+        options={"monitored_relays": [f"light.relay_{i}" for i in range(1, 6)]},
     )
     entry.add_to_hass(hass)
     assert await hass.config_entries.async_setup(entry.entry_id)
@@ -158,3 +159,88 @@ async def test_recovery_refuses_orphaned_on_relay(
         await action(hass, "resume")
     assert sensor(hass, "status").state == "paused"
     assert sensor(hass, "available").state == "0"
+
+
+
+async def test_options_form_reconfigures_supervised_relays(
+    hass: HomeAssistant, queue_entry: MockConfigEntry
+) -> None:
+    """The Configure UI persists selection and reloads the entry paused."""
+    form = await hass.config_entries.options.async_init(queue_entry.entry_id)
+    assert form["type"] is not None
+    result = await hass.config_entries.options.async_configure(
+        form["flow_id"], {"monitored_relays": ["light.relay_1"]}
+    )
+    assert result["type"].value == "create_entry"
+    await hass.async_block_till_done()
+
+    assert queue_entry.options["monitored_relays"] == ["light.relay_1"]
+    assert sensor(hass, "status").state == "paused"
+    assert sensor(hass, "status").attributes["monitored_relays"] == [
+        "light.relay_1"
+    ]
+
+    hass.states.async_set("light.relay_3", "on")
+    await hass.async_block_till_done()
+    await action(hass, "resume")
+    assert sensor(hass, "status").state == "ready"
+    await request(hass, 1)
+    assert sensor(hass, "active").state == "1"
+    with pytest.raises(HomeAssistantError, match="not supervised"):
+        await request(hass, 3)
+
+
+async def test_options_form_rejects_removal_of_active_reservation(
+    hass: HomeAssistant, queue_entry: MockConfigEntry
+) -> None:
+    """An existing slot must not vanish when a relay is deselected."""
+    await action(hass, "resume")
+    await request(hass, 3)
+
+    form = await hass.config_entries.options.async_init(queue_entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        form["flow_id"], {"monitored_relays": ["light.relay_1"]}
+    )
+    assert result["type"].value == "form"
+    assert result["errors"]["base"] == "relays_in_use"
+    assert "light.relay_3" in queue_entry.options["monitored_relays"]
+    assert sensor(hass, "active").state == "1"
+
+
+async def test_options_form_rejects_removal_of_waiting_request(
+    hass: HomeAssistant, queue_entry: MockConfigEntry
+) -> None:
+    """A waiting queue entry is just as protected as an active booking."""
+    await action(hass, "resume")
+    for i in range(1, 5):
+        await request(hass, i)
+    assert sensor(hass, "waiting").state == "1"
+
+    form = await hass.config_entries.options.async_init(queue_entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        form["flow_id"], {"monitored_relays": [
+            "light.relay_1", "light.relay_2", "light.relay_3"
+        ]}
+    )
+    assert result["errors"]["base"] == "relays_in_use"
+
+
+async def test_legacy_stored_history_ignored_after_explicit_selection(
+    hass: HomeAssistant, queue_entry: MockConfigEntry
+) -> None:
+    """An old released test relay must not prevent migration to one heater."""
+    runtime = hass.data[DOMAIN][queue_entry.entry_id]
+    snapshot = runtime.manager.export_state()
+    snapshot["known_relays"] = {"old_ch3": "light.relay_3"}
+    await runtime.store.async_save(snapshot)
+
+    form = await hass.config_entries.options.async_init(queue_entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        form["flow_id"], {"monitored_relays": ["light.relay_1"]}
+    )
+    assert result["type"].value == "create_entry"
+    await hass.async_block_till_done()
+    hass.states.async_set("light.relay_3", "on")
+    await hass.async_block_till_done()
+    await action(hass, "resume")
+    assert sensor(hass, "status").state == "ready"
