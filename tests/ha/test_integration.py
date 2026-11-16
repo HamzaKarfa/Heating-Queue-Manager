@@ -345,7 +345,7 @@ async def test_capacity_forms_use_number_box_not_slider(
         assert selector.config["max"] == 50
         assert selector.config["step"] == 1
 
-    setup = await hass.config_entries.flow.async_init(DOMAIN)
+    setup = await hass.config_entries.flow.async_init(DOMAIN, context={"source": "user"})
     assert setup["type"].value == "form"
     assert_number_box(setup["data_schema"])
 
