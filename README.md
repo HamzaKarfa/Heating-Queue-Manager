@@ -1,3 +1,6 @@
+<img width="154" height="154" alt="Logo RQ en flux bleu-cyan" src="https://github.com/user-attachments/assets/6e3b34af-3bfe-4f86-abae-321be968eeaf" />
+
+
 # Resource Queue Manager (FIFO)
 
 **Resource Queue Manager (FIFO)** is a Home Assistant custom integration that coordinates a configurable number of **simultaneous resource reservations** using a first-in, first-out (FIFO) queue.
