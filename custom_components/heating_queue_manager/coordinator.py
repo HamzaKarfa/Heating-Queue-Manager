@@ -52,6 +52,14 @@ class HeatingQueueCoordinator:
                 f"{heater_id!r} is already bound to {old!r}"
             )
 
+        if any(
+            other_id != heater_id and bound_relay == relay_entity_id
+            for other_id, bound_relay in self._relays.items()
+        ):
+            raise QueueStateError(
+                f"Relay {relay_entity_id!r} is bound to another heater"
+            )
+
         state = self._relay_state(relay_entity_id)
         if state not in ("on", "off"):
             raise QueueStateError(
