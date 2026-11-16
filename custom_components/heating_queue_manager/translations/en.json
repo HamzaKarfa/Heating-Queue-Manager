@@ -49,5 +49,22 @@
       "name": "Resume queue after restart",
       "description": "Verify all known relay states and re-enable FIFO requests. Inspect heating equipment before resuming."
     }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Supervised relays",
+        "description": "Select supervised relays and the maximum number of simultaneous reservations. Active and waiting bookings remain protected.",
+        "data": {
+          "monitored_relays": "Supervised relays",
+          "max_active": "Maximum simultaneous heating reservations"
+        }
+      }
+    },
+    "error": {
+      "relays_in_use": "Cannot exclude a relay with an active or waiting reservation. Release or cancel it first.",
+      "storage_unavailable": "Cannot read saved bookings. Configuration unchanged.",
+      "max_active_below_reserved": "Cannot reduce the limit below the number of currently active reservations."
+    }
   }
 }

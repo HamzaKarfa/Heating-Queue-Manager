@@ -49,5 +49,22 @@
       "name": "Reprendre la file après redémarrage",
       "description": "Vérifie les états des relais connus avant de réautoriser les demandes FIFO. Contrôlez l'installation avant la reprise."
     }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Relais supervisés",
+        "description": "Choisissez les relais supervisés et le nombre maximal de réservations simultanées. Les réservations actives et les demandes en attente sont protégées.",
+        "data": {
+          "monitored_relays": "Relais supervisés",
+          "max_active": "Nombre maximal de chauffes simultanées"
+        }
+      }
+    },
+    "error": {
+      "relays_in_use": "Impossible d'exclure un relais avec une réservation ou une demande FIFO en attente. Libérez ou annulez d'abord la demande.",
+      "storage_unavailable": "Impossible de lire les réservations sauvegardées. Configuration inchangée.",
+      "max_active_below_reserved": "Impossible de réduire la limite sous le nombre de réservations actuellement actives."
+    }
   }
 }

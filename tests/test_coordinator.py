@@ -23,7 +23,7 @@ class CoordinatorTests(unittest.TestCase):
         self.relays = {
             f"light.relay_{i}": "off" for i in range(1, 8)
         }
-        self.manager = HeatingQueueCoordinator(3, self.relays.get)
+        self.manager = HeatingQueueCoordinator(3, self.relays.get, self.relays)
 
     def request(self, i: int):
         return self.manager.request(f"h{i}", f"light.relay_{i}")

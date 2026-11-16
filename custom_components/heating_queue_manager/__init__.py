@@ -17,6 +17,7 @@ from .const import (
     ATTR_HEATER_ID,
     ATTR_RELAY_ENTITY_ID,
     CONF_MAX_ACTIVE,
+    CONF_MONITORED_RELAYS,
     DEFAULT_MAX_ACTIVE,
     DOMAIN,
     EVENT_SLOT_GRANTED,
@@ -126,7 +127,7 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
         entry_id, runtime = _get_runtime()
         async with runtime.lock:
             try:
-                runtime.manager.resume()
+                result = runtime.manager.resume()
             except QueueStateError as err:
                 raise HomeAssistantError(str(err)) from err
             try:
@@ -134,7 +135,7 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
             except HomeAssistantError:
                 async_dispatcher_send(hass, SIGNAL_QUEUE_UPDATED, entry_id)
                 raise
-            _publish(entry_id, runtime, runtime.manager.snapshot())
+            _publish(entry_id, runtime, result)
 
     hass.services.async_register(
         DOMAIN, SERVICE_REQUEST, async_request, schema=REQUEST_SCHEMA
@@ -164,14 +165,25 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         saved = await store.async_load()
         if saved is None:
             manager = HeatingQueueCoordinator(
-                max_active=entry.data.get(CONF_MAX_ACTIVE, DEFAULT_MAX_ACTIVE),
+                max_active=entry.options.get(
+                    CONF_MAX_ACTIVE,
+                    entry.data.get(CONF_MAX_ACTIVE, DEFAULT_MAX_ACTIVE),
+                ),
                 relay_state=get_relay_state,
+                monitored_relays=entry.options.get(CONF_MONITORED_RELAYS, []),
             )
         else:
             manager = HeatingQueueCoordinator.from_state(
-                max_active=entry.data.get(CONF_MAX_ACTIVE, DEFAULT_MAX_ACTIVE),
+                max_active=entry.options.get(
+                    CONF_MAX_ACTIVE,
+                    entry.data.get(CONF_MAX_ACTIVE, DEFAULT_MAX_ACTIVE),
+                ),
                 relay_state=get_relay_state,
                 saved=saved,
+                monitored_relays=entry.options.get(CONF_MONITORED_RELAYS, []),
+                legacy_max_active=entry.data.get(
+                    CONF_MAX_ACTIVE, DEFAULT_MAX_ACTIVE
+                ),
             )
     except Exception as err:
         # Never reset to an empty queue on a corrupt/unreadable snapshot.
