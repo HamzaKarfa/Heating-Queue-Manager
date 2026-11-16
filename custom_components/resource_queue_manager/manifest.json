@@ -9,5 +9,10 @@
   ],
   "config_flow": true,
   "integration_type": "helper",
-  "requirements": []
+  "requirements": [],
+  "iot_class": "calculated",
+  "categories": [
+    "helpers"
+  ],
+  "single_config_entry": true
 }

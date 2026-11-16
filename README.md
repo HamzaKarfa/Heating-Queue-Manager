@@ -123,7 +123,7 @@ Before publishing a catalog submission, the maintainer should:
 
 1. Confirm [HACS / Marketplace validation](https://github.com/HamzaKarfa/Resource-Queue-Manager/actions/workflows/validate.yml) and [Home Assistant integration tests](https://github.com/HamzaKarfa/Resource-Queue-Manager/actions/workflows/home-assistant-tests.yml) are passing on `main`.
 2. Verify a complete queue grant/ON/OFF/release cycle with a low-risk test device, and check all recovery paths before any heater automation is enabled.
-3. Set the GitHub repository **Description**, **Topics**, and an appropriate license, and keep GitHub Issues enabled.
+3. Set the GitHub repository **Description** and **Topics** in the repository's **About** panel, verify that GitHub Issues stay enabled, and review the proposed [MIT License](LICENSE) before merging.
 4. Publish a **GitHub Release** matching the integration's `manifest.json` version (a Git tag alone is not a release). Use `docs/releases/v0.4.0.md` as the release notes.
 5. Only then propose adding `HamzaKarfa/Resource-Queue-Manager` alphabetically to the `integration` file in [hacs/default](https://github.com/hacs/default).
 
@@ -132,3 +132,7 @@ Validation runs automatically for pull requests, pushes, and on a weekly schedul
 ## Versioning
 
 The integration's `manifest.json` version is the installed component version. The published GitHub release tag should use the same semantic version prefixed by `v`, for example `v0.4.0`. Published releases, not lightweight tags alone, provide stable update targets to Marketplace users. No automatic release is generated merely by merging this repository's workflow changes.
+
+### License
+
+This branch **proposes** the [MIT license](LICENSE) to allow redistribution and contribution to a community integration. Repository ownership must approve this choice before merging the publication-readiness PR.
