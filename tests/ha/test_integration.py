@@ -345,10 +345,25 @@ async def test_capacity_forms_use_number_box_not_slider(
         assert selector.config["max"] == 50
         assert selector.config["step"] == 1
 
-    setup = await hass.config_entries.flow.async_init(DOMAIN, context={"source": "user"})
-    assert setup["type"].value == "form"
-    assert_number_box(setup["data_schema"])
-
     options = await hass.config_entries.options.async_init(queue_entry.entry_id)
     assert options["type"].value == "form"
     assert_number_box(options["data_schema"])
+
+
+async def test_initial_setup_uses_number_box(hass: HomeAssistant) -> None:
+    """The first setup flow shows a numeric input before an entry exists."""
+    from homeassistant.helpers.selector import NumberSelector
+
+    assert await async_setup_component(hass, DOMAIN, {})
+    setup = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": "user"}
+    )
+    assert setup["type"].value == "form"
+    selector = next(
+        field for marker, field in setup["data_schema"].schema.items()
+        if marker.schema == "max_active"
+    )
+    assert isinstance(selector, NumberSelector)
+    assert selector.config["mode"] == "box"
+    assert selector.config["min"] == 1
+    assert selector.config["max"] == 50
