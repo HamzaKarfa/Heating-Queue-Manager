@@ -1,0 +1,11 @@
+{
+  "domain": "heating_queue_manager",
+  "name": "Heating Queue Manager",
+  "version": "0.1.0",
+  "documentation": "https://github.com/HamzaKarfa/Heating-Queue-Manager",
+  "issue_tracker": "https://github.com/HamzaKarfa/Heating-Queue-Manager/issues",
+  "codeowners": ["@HamzaKarfa"],
+  "config_flow": true,
+  "integration_type": "helper",
+  "requirements": []
+}

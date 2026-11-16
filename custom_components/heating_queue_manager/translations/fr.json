@@ -1,0 +1,11 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Heating Queue Manager",
+        "description": "Configurez le nombre maximal de chauffages autorisés simultanément.",
+        "data": {"max_active": "Nombre maximal de radiateurs simultanés"}
+      }
+    }
+  }
+}
