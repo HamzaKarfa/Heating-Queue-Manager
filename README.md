@@ -1,4 +1,4 @@
-<img width="154" height="154" alt="Logo RQ en flux bleu-cyan" src="https://github.com/user-attachments/assets/6e3b34af-3bfe-4f86-abae-321be968eeaf" />
+![Resource Queue Manager (FIFO) logo](assets/icon.png)
 
 
 # Resource Queue Manager (FIFO)
@@ -38,7 +38,7 @@ custom_components/resource_queue_manager/
 └── brand/icon.png
 ```
 
-Install through HACS as a custom integration repository, or copy the `resource_queue_manager` folder into Home Assistant's `config/custom_components`. Restart Home Assistant. Add **Resource Queue Manager (FIFO)** under **Settings → Devices & services**. Under **Configure**, select the supervised entities and maximum reservations. Both setup and Configure display the capacity as an editable **numeric input** (integer 1–50), rather than a slider; the form includes concise guidance for each setting. Verify the equipment and invoke:
+On Home Assistant 2026.11+, open **Settings → Marketplace → Add from link** and enter `HamzaKarfa/Resource-Queue-Manager`, then install the integration. Until this project is included in the public catalog, use that repository link. Alternatively, copy the `resource_queue_manager` folder into Home Assistant's `config/custom_components`. Restart Home Assistant. Add **Resource Queue Manager (FIFO)** under **Settings → Devices & services**. Under **Configure**, select the supervised entities and maximum reservations. Both setup and Configure display the capacity as an editable **numeric input** (integer 1–50), rather than a slider; the form includes concise guidance for each setting. Verify the equipment and invoke:
 
 ```yaml
 action: resource_queue_manager.resume
@@ -113,6 +113,26 @@ python -m pytest -q tests/ha/test_integration.py
 
 CI exercises both isolated Python code and Home Assistant 2026.11 config entries and services. Tests use simulated states, not physical loads.
 
-## GitHub repository slug
+## Marketplace publication and validation
 
-The repository is presently hosted at [HamzaKarfa/Heating-Queue-Manager](https://github.com/HamzaKarfa/Heating-Queue-Manager). To rename its **GitHub URL** too, the repository owner must open **GitHub → Repository Settings → General → Repository name** and change it to `Resource-Queue-Manager`. The integration's manifest links still point to the current, valid GitHub URL until that action is completed.
+**Public repository:** https://github.com/HamzaKarfa/Resource-Queue-Manager
+
+The project is currently in a testing phase and is installable directly via **Marketplace → Add from link**, even before its catalog submission is accepted. The user is responsible for verifying automation behavior and independent electrical protections before operating real loads. The integration itself never actuates a device.
+
+Before publishing a catalog submission, the maintainer should:
+
+1. Confirm [HACS / Marketplace validation](https://github.com/HamzaKarfa/Resource-Queue-Manager/actions/workflows/validate.yml) and [Home Assistant integration tests](https://github.com/HamzaKarfa/Resource-Queue-Manager/actions/workflows/home-assistant-tests.yml) are passing on `main`.
+2. Verify a complete queue grant/ON/OFF/release cycle with a low-risk test device, and check all recovery paths before any heater automation is enabled.
+3. Set the GitHub repository **Description** and **Topics** in the repository's **About** panel, verify that GitHub Issues stay enabled, and review the proposed [MIT License](LICENSE) before merging.
+4. Publish a **GitHub Release** matching the integration's `manifest.json` version (a Git tag alone is not a release). Use `docs/releases/v0.4.0.md` as the release notes.
+5. Only then propose adding `HamzaKarfa/Resource-Queue-Manager` alphabetically to the `integration` file in [hacs/default](https://github.com/hacs/default).
+
+Validation runs automatically for pull requests, pushes, and on a weekly schedule; no HACS warnings are deliberately ignored. See [the Home Assistant Marketplace catalog submission guide](https://contributors.home-assistant.io/marketplace/guides/catalog/).
+
+## Versioning
+
+The integration's `manifest.json` version is the installed component version. The published GitHub release tag should use the same semantic version prefixed by `v`, for example `v0.4.0`. Published releases, not lightweight tags alone, provide stable update targets to Marketplace users. No automatic release is generated merely by merging this repository's workflow changes.
+
+### License
+
+This branch **proposes** the [MIT license](LICENSE) to allow redistribution and contribution to a community integration. Repository ownership must approve this choice before merging the publication-readiness PR.

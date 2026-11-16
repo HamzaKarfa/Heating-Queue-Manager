@@ -30,6 +30,8 @@ from .const import (
 from .coordinator import ResourceQueueCoordinator, QueueStateError
 from .fifo import QueueResult
 
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
+
 PLATFORMS = [Platform.SENSOR]
 STORAGE_VERSION = 1
 

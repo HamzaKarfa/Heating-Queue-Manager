@@ -1,13 +1,18 @@
 {
   "domain": "resource_queue_manager",
   "name": "Resource Queue Manager (FIFO)",
-  "version": "0.4.0-beta.1",
-  "documentation": "https://github.com/HamzaKarfa/Heating-Queue-Manager",
-  "issue_tracker": "https://github.com/HamzaKarfa/Heating-Queue-Manager/issues",
+  "categories": [
+    "helpers"
+  ],
   "codeowners": [
     "@HamzaKarfa"
   ],
   "config_flow": true,
+  "documentation": "https://github.com/HamzaKarfa/Resource-Queue-Manager",
   "integration_type": "helper",
-  "requirements": []
+  "iot_class": "calculated",
+  "issue_tracker": "https://github.com/HamzaKarfa/Resource-Queue-Manager/issues",
+  "requirements": [],
+  "single_config_entry": true,
+  "version": "0.4.0"
 }
