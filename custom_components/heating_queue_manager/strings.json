@@ -1,0 +1,49 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Heating Queue Manager",
+        "description": "Configure the maximum number of simultaneous heating reservations.",
+        "data": {
+          "max_active": "Maximum simultaneous heaters"
+        }
+      }
+    }
+  },
+  "services": {
+    "request": {
+      "name": "Request slot",
+      "description": "Request a FIFO reservation. Does not switch a relay.",
+      "fields": {
+        "heater_id": {
+          "name": "Heater ID",
+          "description": "Stable identifier for the heater."
+        },
+        "relay_entity_id": {
+          "name": "Relay entity",
+          "description": "Light or switch entity powering this heater."
+        }
+      }
+    },
+    "release": {
+      "name": "Release slot",
+      "description": "Release a reservation only when its relay state is off.",
+      "fields": {
+        "heater_id": {
+          "name": "Heater ID",
+          "description": "Previously requested heater identifier."
+        }
+      }
+    },
+    "cancel": {
+      "name": "Cancel request",
+      "description": "Cancel a waiting request. Reserved requests require their relay to be off.",
+      "fields": {
+        "heater_id": {
+          "name": "Heater ID",
+          "description": "Previously requested heater identifier."
+        }
+      }
+    }
+  }
+}
