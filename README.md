@@ -108,7 +108,16 @@ Action handlers use an `asyncio.Lock` and wait for `Store.async_save()` **before
 python -m unittest discover -s tests -v
 ```
 
-GitHub Actions runs these pure-Python tests against Python 3.13 and 3.14. These tests validate queue and coordinator logic; they do **not** yet validate the integration against a full running Home Assistant instance.
+GitHub Actions runs pure-Python tests against Python 3.13 and 3.14. A separate workflow now runs six additional integration tests through real Home Assistant services and config-entry reloads against Home Assistant 2026.11 using the matching `pytest-homeassistant` package. They use simulated relay states and never command an actual heater.
+
+To run the Home Assistant integration tests locally, use Python 3.14.2+ in a dedicated virtual environment:
+
+```bash
+python -m pip install "pytest-homeassistant==2026.11.1"
+python -m pytest -q tests/ha/test_integration.py
+```
+
+The integration suite exercises: startup pause/resume, a concurrent request burst, FIFO promotion, stored queue restoration on config-entry reload, unavailable relays and unreserved ON relays. A successful test suite does **not** prove safe control of the physical installation.
 
 ## Next steps
 
