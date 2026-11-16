@@ -325,3 +325,30 @@ async def test_increase_max_with_waiters_promotes_only_on_resume(
     assert sensor(hass, "active").attributes["active"] == ["h1", "h2", "h3", "h4"]
     assert sensor(hass, "waiting").attributes["waiting"] == ["h5"]
     assert sensor(hass, "available").state == "0"
+
+
+async def test_capacity_forms_use_number_box_not_slider(
+    hass: HomeAssistant, queue_entry: MockConfigEntry
+) -> None:
+    """Setup and Configure both expose the native numeric box selector."""
+    from homeassistant.helpers.selector import NumberSelector
+
+    def assert_number_box(schema) -> None:
+        values = {
+            marker.schema: field
+            for marker, field in schema.schema.items()
+        }
+        selector = values["max_active"]
+        assert isinstance(selector, NumberSelector)
+        assert selector.config["mode"] == "box"
+        assert selector.config["min"] == 1
+        assert selector.config["max"] == 50
+        assert selector.config["step"] == 1
+
+    setup = await hass.config_entries.flow.async_init(DOMAIN)
+    assert setup["type"].value == "form"
+    assert_number_box(setup["data_schema"])
+
+    options = await hass.config_entries.options.async_init(queue_entry.entry_id)
+    assert options["type"].value == "form"
+    assert_number_box(options["data_schema"])

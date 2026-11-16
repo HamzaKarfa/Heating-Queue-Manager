@@ -38,7 +38,7 @@ custom_components/resource_queue_manager/
 └── brand/icon.png
 ```
 
-Install through HACS as a custom integration repository, or copy the `resource_queue_manager` folder into Home Assistant's `config/custom_components`. Restart Home Assistant. Add **Resource Queue Manager (FIFO)** under **Settings → Devices & services**. Under **Configure**, select the supervised entities and maximum reservations. Verify the equipment and invoke:
+Install through HACS as a custom integration repository, or copy the `resource_queue_manager` folder into Home Assistant's `config/custom_components`. Restart Home Assistant. Add **Resource Queue Manager (FIFO)** under **Settings → Devices & services**. Under **Configure**, select the supervised entities and maximum reservations. Both setup and Configure display the capacity as an editable **numeric input** (integer 1–50), rather than a slider; the form includes concise guidance for each setting. Verify the equipment and invoke:
 
 ```yaml
 action: resource_queue_manager.resume

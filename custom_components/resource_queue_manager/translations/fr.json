@@ -2,10 +2,13 @@
   "config": {
     "step": {
       "user": {
-        "title": "Resource Queue Manager (FIFO)",
-        "description": "Configurez le nombre maximal de réservations simultanées.",
+        "title": "Configuration initiale",
+        "description": "Choisissez combien de ressources peuvent recevoir une réservation en même temps. Vous pourrez modifier cette limite et sélectionner les entités supervisées depuis « Configurer ».",
         "data": {
-          "max_active": "Nombre maximal de ressources simultanées"
+          "max_active": "Réservations simultanées"
+        },
+        "data_description": {
+          "max_active": "Saisissez un nombre entier entre 1 et 50. Valeur conseillée pour commencer : 3."
         }
       }
     }
@@ -53,11 +56,15 @@
   "options": {
     "step": {
       "init": {
-        "title": "Ressources supervisées et capacité FIFO",
-        "description": "Sélectionnez les entités light ou switch supervisées et le nombre maximal de réservations simultanées. Les réservations existantes restent protégées.",
+        "title": "Gestion des ressources et capacité",
+        "description": "Choisissez les ressources autorisées à demander une place FIFO et définissez la capacité de la file.",
         "data": {
           "monitored_entities": "Entités supervisées",
-          "max_active": "Nombre maximal de réservations simultanées"
+          "max_active": "Réservations simultanées"
+        },
+        "data_description": {
+          "max_active": "Nombre maximal de réservations actives à la fois (1 à 50). Les réservations existantes sont conservées.",
+          "monitored_entities": "Sélectionnez les interrupteurs et relais light/switch pilotés par vos automatisations. Les autres entités seront ignorées."
         }
       }
     },

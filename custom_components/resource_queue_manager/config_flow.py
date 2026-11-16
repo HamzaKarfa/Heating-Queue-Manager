@@ -7,7 +7,13 @@ import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.config_entries import ConfigEntry, OptionsFlowWithReload
 from homeassistant.core import callback
-from homeassistant.helpers.selector import EntitySelector, EntitySelectorConfig
+from homeassistant.helpers.selector import (
+    EntitySelector,
+    EntitySelectorConfig,
+    NumberSelector,
+    NumberSelectorConfig,
+    NumberSelectorMode,
+)
 from homeassistant.helpers.storage import Store
 
 from .const import (
@@ -19,6 +25,17 @@ from .const import (
 
 STORAGE_VERSION = 1
 
+# Native Home Assistant number input instead of a 1-50 slider.
+# The selector validates the range and renders an editable numeric field.
+MAX_ACTIVE_SELECTOR = NumberSelector(
+    NumberSelectorConfig(
+        min=1,
+        max=50,
+        step=1,
+        mode=NumberSelectorMode.BOX,
+    )
+)
+
 
 class ResourceQueueManagerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Configure one singleton Resource Queue Manager (FIFO) instance."""
@@ -28,6 +45,7 @@ class ResourceQueueManagerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_user(self, user_input: dict | None = None):
         """Create a config entry from the integrations UI."""
         if user_input is not None:
+            user_input[CONF_MAX_ACTIVE] = int(user_input[CONF_MAX_ACTIVE])
             await self.async_set_unique_id(DOMAIN)
             self._abort_if_unique_id_configured()
             return self.async_create_entry(
@@ -36,8 +54,9 @@ class ResourceQueueManagerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         schema = vol.Schema(
             {
-                vol.Required(CONF_MAX_ACTIVE, default=DEFAULT_MAX_ACTIVE):
-                vol.All(vol.Coerce(int), vol.Range(min=1, max=50))
+                vol.Required(
+                    CONF_MAX_ACTIVE, default=DEFAULT_MAX_ACTIVE
+                ): MAX_ACTIVE_SELECTOR
             }
         )
         return self.async_show_form(step_id="user", data_schema=schema)
@@ -70,7 +89,7 @@ class ResourceQueueOptionsFlow(OptionsFlowWithReload):
 
         if user_input is not None:
             selected = list(user_input.get(CONF_MONITORED_ENTITIES, []))
-            new_limit = user_input[CONF_MAX_ACTIVE]
+            new_limit = int(user_input[CONF_MAX_ACTIVE])
             runtime = self.hass.data.get(DOMAIN, {}).get(entry.entry_id)
             if runtime is not None:
                 # Locking also prevents an action from changing the FIFO while
@@ -121,9 +140,7 @@ class ResourceQueueOptionsFlow(OptionsFlowWithReload):
                 vol.Required(
                     CONF_MAX_ACTIVE,
                     default=new_limit,
-                ): vol.All(
-                    vol.Coerce(int), vol.Range(min=1, max=50)
-                ),
+                ): MAX_ACTIVE_SELECTOR,
                 vol.Optional(
                     CONF_MONITORED_ENTITIES,
                     default=selected,
