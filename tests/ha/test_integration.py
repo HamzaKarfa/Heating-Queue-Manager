@@ -54,8 +54,8 @@ async def request(hass: HomeAssistant, index: int) -> None:
 
 def sensor(hass: HomeAssistant, metric: str):
     """Read the state through Home Assistant, not coordinator internals."""
-    state = hass.states.get(f"sensor.heating_queue_{metric}")
-    assert state is not None, f"Missing sensor.heating_queue_{metric}"
+    state = hass.states.get(f"sensor.resource_queue_{metric}")
+    assert state is not None, f"Missing sensor.resource_queue_{metric}"
     return state
 
 
@@ -202,7 +202,7 @@ async def test_options_form_rejects_removal_of_active_reservation(
         form["flow_id"], {"monitored_entities": ["light.relay_1"]}
     )
     assert result["type"].value == "form"
-    assert result["errors"]["base"] == "relays_in_use"
+    assert result["errors"]["base"] == "entities_in_use"
     assert "light.relay_3" in queue_entry.options["monitored_entities"]
     assert sensor(hass, "active").state == "1"
 
@@ -222,7 +222,7 @@ async def test_options_form_rejects_removal_of_waiting_request(
             "light.relay_1", "light.relay_2", "light.relay_3"
         ]}
     )
-    assert result["errors"]["base"] == "relays_in_use"
+    assert result["errors"]["base"] == "entities_in_use"
 
 
 async def test_legacy_stored_history_ignored_after_explicit_selection(
