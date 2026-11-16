@@ -3,8 +3,46 @@
     "step": {
       "user": {
         "title": "Heating Queue Manager",
-        "description": "Configurez le nombre maximal de chauffages autorisés simultanément.",
-        "data": {"max_active": "Nombre maximal de radiateurs simultanés"}
+        "description": "Configurez le nombre maximal de réservations de chauffage simultanées.",
+        "data": {
+          "max_active": "Nombre maximal de radiateurs simultanés"
+        }
+      }
+    }
+  },
+  "services": {
+    "request": {
+      "name": "Demander une place",
+      "description": "Demande une réservation FIFO sans commander le relais.",
+      "fields": {
+        "heater_id": {
+          "name": "Identifiant du radiateur",
+          "description": "Identifiant stable du radiateur."
+        },
+        "relay_entity_id": {
+          "name": "Entité relais",
+          "description": "Entité light ou switch qui alimente ce radiateur."
+        }
+      }
+    },
+    "release": {
+      "name": "Libérer une place",
+      "description": "Libère la réservation seulement si le relais est à l'arrêt.",
+      "fields": {
+        "heater_id": {
+          "name": "Identifiant du radiateur",
+          "description": "Identifiant du radiateur concerné."
+        }
+      }
+    },
+    "cancel": {
+      "name": "Annuler la demande",
+      "description": "Annule une demande en attente. Si la place est réservée, le relais doit être à l'arrêt.",
+      "fields": {
+        "heater_id": {
+          "name": "Identifiant du radiateur",
+          "description": "Identifiant du radiateur concerné."
+        }
       }
     }
   }
