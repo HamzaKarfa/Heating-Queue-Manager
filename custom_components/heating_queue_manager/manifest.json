@@ -1,7 +1,7 @@
 {
   "domain": "heating_queue_manager",
   "name": "Heating Queue Manager",
-  "version": "0.2.0-beta.1",
+  "version": "0.3.0-beta.1",
   "documentation": "https://github.com/HamzaKarfa/Heating-Queue-Manager",
   "issue_tracker": "https://github.com/HamzaKarfa/Heating-Queue-Manager/issues",
   "codeowners": [

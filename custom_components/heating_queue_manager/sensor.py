@@ -69,6 +69,7 @@ class HeatingQueueSensor(SensorEntity):
             "waiting": list(snapshot.waiting),
             "max_active": self._manager.max_active,
             "paused": self._manager.paused,
+            "monitored_relays": list(self._manager.monitored_relays),
             "recovery_issues": list(self._manager.recovery_issues()),
         }
 

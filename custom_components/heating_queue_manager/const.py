@@ -3,6 +3,7 @@
 DOMAIN = "heating_queue_manager"
 CONF_MAX_ACTIVE = "max_active"
 DEFAULT_MAX_ACTIVE = 3
+CONF_MONITORED_RELAYS = "monitored_relays"
 
 ATTR_HEATER_ID = "heater_id"
 ATTR_RELAY_ENTITY_ID = "relay_entity_id"

@@ -49,5 +49,20 @@
       "name": "Resume queue after restart",
       "description": "Verify all known relay states and re-enable FIFO requests. Inspect heating equipment before resuming."
     }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Supervised relays",
+        "description": "Select only relays controlled by the FIFO queue. Active or waiting reservations cannot be removed.",
+        "data": {
+          "monitored_relays": "Supervised relays"
+        }
+      }
+    },
+    "error": {
+      "relays_in_use": "Cannot exclude a relay with an active or waiting reservation. Release or cancel it first.",
+      "storage_unavailable": "Cannot read saved bookings. Configuration unchanged."
+    }
   }
 }

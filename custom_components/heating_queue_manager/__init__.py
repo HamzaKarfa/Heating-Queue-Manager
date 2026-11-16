@@ -17,6 +17,7 @@ from .const import (
     ATTR_HEATER_ID,
     ATTR_RELAY_ENTITY_ID,
     CONF_MAX_ACTIVE,
+    CONF_MONITORED_RELAYS,
     DEFAULT_MAX_ACTIVE,
     DOMAIN,
     EVENT_SLOT_GRANTED,
@@ -166,12 +167,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             manager = HeatingQueueCoordinator(
                 max_active=entry.data.get(CONF_MAX_ACTIVE, DEFAULT_MAX_ACTIVE),
                 relay_state=get_relay_state,
+                monitored_relays=entry.options.get(CONF_MONITORED_RELAYS, []),
             )
         else:
             manager = HeatingQueueCoordinator.from_state(
                 max_active=entry.data.get(CONF_MAX_ACTIVE, DEFAULT_MAX_ACTIVE),
                 relay_state=get_relay_state,
                 saved=saved,
+                monitored_relays=entry.options.get(CONF_MONITORED_RELAYS, []),
             )
     except Exception as err:
         # Never reset to an empty queue on a corrupt/unreadable snapshot.

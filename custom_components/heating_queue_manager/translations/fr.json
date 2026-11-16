@@ -49,5 +49,20 @@
       "name": "Reprendre la file après redémarrage",
       "description": "Vérifie les états des relais connus avant de réautoriser les demandes FIFO. Contrôlez l'installation avant la reprise."
     }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Relais supervisés",
+        "description": "Sélectionnez uniquement les relais gérés par la file FIFO. Une réservation active ou en attente ne peut pas être retirée.",
+        "data": {
+          "monitored_relays": "Relais supervisés"
+        }
+      }
+    },
+    "error": {
+      "relays_in_use": "Impossible d'exclure un relais avec une réservation ou une demande FIFO en attente. Libérez ou annulez d'abord la demande.",
+      "storage_unavailable": "Impossible de lire les réservations sauvegardées. Configuration inchangée."
+    }
   }
 }
