@@ -3,6 +3,9 @@
 
 # Resource Queue Manager (FIFO)
 
+[![Open Resource Queue Manager (FIFO) in Home Assistant Marketplace](https://my.home-assistant.io/badges/marketplace_repository.svg)](https://my.home-assistant.io/redirect/marketplace_repository/?owner=HamzaKarfa&repository=Resource-Queue-Manager&category=integration)
+
+
 **Resource Queue Manager (FIFO)** is a Home Assistant custom integration that coordinates a configurable number of **simultaneous resource reservations** using a first-in, first-out (FIFO) queue.
 
 The FIFO engine is generic. This version of the Home Assistant adapter supervises `light` and `switch` entities. Your **automations control the physical devices**; the integration never switches an entity on or off.
