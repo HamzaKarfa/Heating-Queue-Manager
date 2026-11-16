@@ -1,0 +1,29 @@
+name: Marketplace validation
+
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: "0 0 * * 0"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  hacs:
+    name: HACS / Marketplace
+    runs-on: ubuntu-latest
+    steps:
+      - name: HACS repository validation
+        uses: hacs/action@main
+        with:
+          category: integration
+
+  hassfest:
+    name: Home Assistant hassfest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate custom integration
+        uses: home-assistant/actions/hassfest@master
