@@ -6,7 +6,7 @@ import shutil
 import pytest
 
 
-DOMAIN = "heating_queue_manager"
+DOMAIN = "resource_queue_manager"
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
