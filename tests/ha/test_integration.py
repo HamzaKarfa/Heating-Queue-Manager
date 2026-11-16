@@ -2,7 +2,7 @@
 
 Unlike isolated FIFO tests, these tests exercise the actual Home Assistant
 adapter, its sensor entities and its persistence using a local test instance.
-No physical relays are connected or commanded.
+No physical entities are connected or commanded.
 """
 
 import asyncio
@@ -14,7 +14,7 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.setup import async_setup_component
 from pytest_homeassistant.common import MockConfigEntry
 
-DOMAIN = "heating_queue_manager"
+DOMAIN = "resource_queue_manager"
 
 
 @pytest.fixture
@@ -23,10 +23,10 @@ async def queue_entry(hass: HomeAssistant) -> MockConfigEntry:
     assert await async_setup_component(hass, DOMAIN, {})
     entry = MockConfigEntry(
         domain=DOMAIN,
-        title="Heating Queue Manager",
+        title="Resource Queue Manager (FIFO)",
         unique_id=DOMAIN,
         data={"max_active": 3},
-        options={"monitored_relays": [f"light.relay_{i}" for i in range(1, 6)]},
+        options={"monitored_entities": [f"light.relay_{i}" for i in range(1, 6)]},
     )
     entry.add_to_hass(hass)
     assert await hass.config_entries.async_setup(entry.entry_id)
@@ -47,15 +47,15 @@ async def request(hass: HomeAssistant, index: int) -> None:
     await action(
         hass,
         "request",
-        heater_id=f"h{index}",
-        relay_entity_id=f"light.relay_{index}",
+        resource_id=f"h{index}",
+        entity_id=f"light.relay_{index}",
     )
 
 
 def sensor(hass: HomeAssistant, metric: str):
     """Read the state through Home Assistant, not coordinator internals."""
-    state = hass.states.get(f"sensor.heating_queue_{metric}")
-    assert state is not None, f"Missing sensor.heating_queue_{metric}"
+    state = hass.states.get(f"sensor.resource_queue_{metric}")
+    assert state is not None, f"Missing sensor.resource_queue_{metric}"
     return state
 
 
@@ -87,13 +87,13 @@ async def test_concurrent_requests_do_not_overallocate(
 async def test_release_promotes_oldest_waiting(
     hass: HomeAssistant, queue_entry: MockConfigEntry
 ) -> None:
-    """FIFOs only admit a waiting heater after a confirmed OFF release."""
+    """FIFOs only admit a waiting resource after a confirmed OFF release."""
     await action(hass, "resume")
     for i in range(1, 6):
         await request(hass, i)
 
     assert sensor(hass, "waiting").attributes["waiting"] == ["h4", "h5"]
-    await action(hass, "release", heater_id="h2")
+    await action(hass, "release", resource_id="h2")
     assert sensor(hass, "active").attributes["active"] == ["h1", "h3", "h4"]
     assert sensor(hass, "waiting").attributes["waiting"] == ["h5"]
 
@@ -119,7 +119,7 @@ async def test_reload_restores_order_without_regrant(
 
     await action(hass, "resume")
     assert sensor(hass, "status").state == "ready"
-    await action(hass, "release", heater_id="h1")
+    await action(hass, "release", resource_id="h1")
     assert sensor(hass, "active").attributes["active"] == ["h2", "h3", "h4"]
     assert sensor(hass, "waiting").attributes["waiting"] == ["h5"]
 
@@ -145,10 +145,10 @@ async def test_recovery_refuses_unavailable_known_relay(
 async def test_recovery_refuses_orphaned_on_relay(
     hass: HomeAssistant, queue_entry: MockConfigEntry
 ) -> None:
-    """A known ON relay without reservation is inconsistent."""
+    """A known ON entity without reservation is inconsistent."""
     await action(hass, "resume")
     await request(hass, 1)
-    await action(hass, "release", heater_id="h1")
+    await action(hass, "release", resource_id="h1")
     hass.states.async_set("light.relay_1", "on")
     await hass.async_block_till_done()
 
@@ -169,14 +169,14 @@ async def test_options_form_reconfigures_supervised_relays(
     form = await hass.config_entries.options.async_init(queue_entry.entry_id)
     assert form["type"] is not None
     result = await hass.config_entries.options.async_configure(
-        form["flow_id"], {"monitored_relays": ["light.relay_1"]}
+        form["flow_id"], {"monitored_entities": ["light.relay_1"]}
     )
     assert result["type"].value == "create_entry"
     await hass.async_block_till_done()
 
-    assert queue_entry.options["monitored_relays"] == ["light.relay_1"]
+    assert queue_entry.options["monitored_entities"] == ["light.relay_1"]
     assert sensor(hass, "status").state == "paused"
-    assert sensor(hass, "status").attributes["monitored_relays"] == [
+    assert sensor(hass, "status").attributes["monitored_entities"] == [
         "light.relay_1"
     ]
 
@@ -193,17 +193,17 @@ async def test_options_form_reconfigures_supervised_relays(
 async def test_options_form_rejects_removal_of_active_reservation(
     hass: HomeAssistant, queue_entry: MockConfigEntry
 ) -> None:
-    """An existing slot must not vanish when a relay is deselected."""
+    """An existing slot must not vanish when a entity is deselected."""
     await action(hass, "resume")
     await request(hass, 3)
 
     form = await hass.config_entries.options.async_init(queue_entry.entry_id)
     result = await hass.config_entries.options.async_configure(
-        form["flow_id"], {"monitored_relays": ["light.relay_1"]}
+        form["flow_id"], {"monitored_entities": ["light.relay_1"]}
     )
     assert result["type"].value == "form"
-    assert result["errors"]["base"] == "relays_in_use"
-    assert "light.relay_3" in queue_entry.options["monitored_relays"]
+    assert result["errors"]["base"] == "entities_in_use"
+    assert "light.relay_3" in queue_entry.options["monitored_entities"]
     assert sensor(hass, "active").state == "1"
 
 
@@ -218,17 +218,17 @@ async def test_options_form_rejects_removal_of_waiting_request(
 
     form = await hass.config_entries.options.async_init(queue_entry.entry_id)
     result = await hass.config_entries.options.async_configure(
-        form["flow_id"], {"monitored_relays": [
+        form["flow_id"], {"monitored_entities": [
             "light.relay_1", "light.relay_2", "light.relay_3"
         ]}
     )
-    assert result["errors"]["base"] == "relays_in_use"
+    assert result["errors"]["base"] == "entities_in_use"
 
 
 async def test_legacy_stored_history_ignored_after_explicit_selection(
     hass: HomeAssistant, queue_entry: MockConfigEntry
 ) -> None:
-    """An old released test relay must not prevent migration to one heater."""
+    """An old released test entity must not prevent migration to one resource."""
     runtime = hass.data[DOMAIN][queue_entry.entry_id]
     snapshot = runtime.manager.export_state()
     snapshot["known_relays"] = {"old_ch3": "light.relay_3"}
@@ -236,7 +236,7 @@ async def test_legacy_stored_history_ignored_after_explicit_selection(
 
     form = await hass.config_entries.options.async_init(queue_entry.entry_id)
     result = await hass.config_entries.options.async_configure(
-        form["flow_id"], {"monitored_relays": ["light.relay_1"]}
+        form["flow_id"], {"monitored_entities": ["light.relay_1"]}
     )
     assert result["type"].value == "create_entry"
     await hass.async_block_till_done()
@@ -255,7 +255,7 @@ async def test_edit_max_slots_from_options_and_persist(
         form["flow_id"],
         {
             "max_active": 2,
-            "monitored_relays": [f"light.relay_{i}" for i in range(1, 6)],
+            "monitored_entities": [f"light.relay_{i}" for i in range(1, 6)],
         },
     )
     assert result["type"].value == "create_entry"
@@ -288,7 +288,7 @@ async def test_options_reject_limit_below_existing_active_reservations(
         flow["flow_id"],
         {
             "max_active": 2,
-            "monitored_relays": [f"light.relay_{i}" for i in range(1, 6)],
+            "monitored_entities": [f"light.relay_{i}" for i in range(1, 6)],
         },
     )
     assert result["type"].value == "form"
@@ -311,7 +311,7 @@ async def test_increase_max_with_waiters_promotes_only_on_resume(
         flow["flow_id"],
         {
             "max_active": 4,
-            "monitored_relays": [f"light.relay_{i}" for i in range(1, 6)],
+            "monitored_entities": [f"light.relay_{i}" for i in range(1, 6)],
         },
     )
     assert result["type"].value == "create_entry"
@@ -325,3 +325,30 @@ async def test_increase_max_with_waiters_promotes_only_on_resume(
     assert sensor(hass, "active").attributes["active"] == ["h1", "h2", "h3", "h4"]
     assert sensor(hass, "waiting").attributes["waiting"] == ["h5"]
     assert sensor(hass, "available").state == "0"
+
+
+async def test_capacity_forms_use_number_box_not_slider(
+    hass: HomeAssistant, queue_entry: MockConfigEntry
+) -> None:
+    """Setup and Configure both expose the native numeric box selector."""
+    from homeassistant.helpers.selector import NumberSelector
+
+    def assert_number_box(schema) -> None:
+        values = {
+            marker.schema: field
+            for marker, field in schema.schema.items()
+        }
+        selector = values["max_active"]
+        assert isinstance(selector, NumberSelector)
+        assert selector.config["mode"] == "box"
+        assert selector.config["min"] == 1
+        assert selector.config["max"] == 50
+        assert selector.config["step"] == 1
+
+    setup = await hass.config_entries.flow.async_init(DOMAIN, context={"source": "user"})
+    assert setup["type"].value == "form"
+    assert_number_box(setup["data_schema"])
+
+    options = await hass.config_entries.options.async_init(queue_entry.entry_id)
+    assert options["type"].value == "form"
+    assert_number_box(options["data_schema"])

@@ -1,12 +1,12 @@
-"""Constants for Heating Queue Manager."""
+"""Constants for Resource Queue Manager (FIFO)."""
 
-DOMAIN = "heating_queue_manager"
+DOMAIN = "resource_queue_manager"
 CONF_MAX_ACTIVE = "max_active"
 DEFAULT_MAX_ACTIVE = 3
-CONF_MONITORED_RELAYS = "monitored_relays"
+CONF_MONITORED_ENTITIES = "monitored_entities"
 
-ATTR_HEATER_ID = "heater_id"
-ATTR_RELAY_ENTITY_ID = "relay_entity_id"
+ATTR_RESOURCE_ID = "resource_id"
+ATTR_ENTITY_ID = "entity_id"
 SERVICE_REQUEST = "request"
 SERVICE_RELEASE = "release"
 SERVICE_CANCEL = "cancel"

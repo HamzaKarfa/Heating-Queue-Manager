@@ -7,37 +7,56 @@ import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.config_entries import ConfigEntry, OptionsFlowWithReload
 from homeassistant.core import callback
-from homeassistant.helpers.selector import EntitySelector, EntitySelectorConfig
+from homeassistant.helpers.selector import (
+    EntitySelector,
+    EntitySelectorConfig,
+    NumberSelector,
+    NumberSelectorConfig,
+    NumberSelectorMode,
+)
 from homeassistant.helpers.storage import Store
 
 from .const import (
     CONF_MAX_ACTIVE,
-    CONF_MONITORED_RELAYS,
+    CONF_MONITORED_ENTITIES,
     DEFAULT_MAX_ACTIVE,
     DOMAIN,
 )
 
 STORAGE_VERSION = 1
 
+# Native Home Assistant number input instead of a 1-50 slider.
+# The selector validates the range and renders an editable numeric field.
+MAX_ACTIVE_SELECTOR = NumberSelector(
+    NumberSelectorConfig(
+        min=1,
+        max=50,
+        step=1,
+        mode=NumberSelectorMode.BOX,
+    )
+)
 
-class HeatingQueueManagerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
-    """Configure one singleton Heating Queue Manager instance."""
+
+class ResourceQueueManagerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
+    """Configure one singleton Resource Queue Manager (FIFO) instance."""
 
     VERSION = 1
 
     async def async_step_user(self, user_input: dict | None = None):
         """Create a config entry from the integrations UI."""
         if user_input is not None:
+            user_input[CONF_MAX_ACTIVE] = int(user_input[CONF_MAX_ACTIVE])
             await self.async_set_unique_id(DOMAIN)
             self._abort_if_unique_id_configured()
             return self.async_create_entry(
-                title="Heating Queue Manager", data=user_input
+                title="Resource Queue Manager (FIFO)", data=user_input
             )
 
         schema = vol.Schema(
             {
-                vol.Required(CONF_MAX_ACTIVE, default=DEFAULT_MAX_ACTIVE):
-                vol.All(vol.Coerce(int), vol.Range(min=1, max=50))
+                vol.Required(
+                    CONF_MAX_ACTIVE, default=DEFAULT_MAX_ACTIVE
+                ): MAX_ACTIVE_SELECTOR
             }
         )
         return self.async_show_form(step_id="user", data_schema=schema)
@@ -46,13 +65,13 @@ class HeatingQueueManagerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     @callback
     def async_get_options_flow(
         config_entry: ConfigEntry,
-    ) -> "HeatingQueueOptionsFlow":
+    ) -> "ResourceQueueOptionsFlow":
         """Expose the Configure button in Home Assistant."""
-        return HeatingQueueOptionsFlow()
+        return ResourceQueueOptionsFlow()
 
 
-class HeatingQueueOptionsFlow(OptionsFlowWithReload):
-    """Edit both the slot limit and the explicitly supervised relay list."""
+class ResourceQueueOptionsFlow(OptionsFlowWithReload):
+    """Edit both the slot limit and the explicitly supervised entity list."""
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
@@ -60,7 +79,7 @@ class HeatingQueueOptionsFlow(OptionsFlowWithReload):
         """Validate changes against currently queued reservations."""
         entry = self.config_entry
         errors: dict[str, str] = {}
-        existing = list(entry.options.get(CONF_MONITORED_RELAYS, []))
+        existing = list(entry.options.get(CONF_MONITORED_ENTITIES, []))
         current_limit = entry.options.get(
             CONF_MAX_ACTIVE,
             entry.data.get(CONF_MAX_ACTIVE, DEFAULT_MAX_ACTIVE),
@@ -69,8 +88,8 @@ class HeatingQueueOptionsFlow(OptionsFlowWithReload):
         new_limit = current_limit
 
         if user_input is not None:
-            selected = list(user_input.get(CONF_MONITORED_RELAYS, []))
-            new_limit = user_input[CONF_MAX_ACTIVE]
+            selected = list(user_input.get(CONF_MONITORED_ENTITIES, []))
+            new_limit = int(user_input[CONF_MAX_ACTIVE])
             runtime = self.hass.data.get(DOMAIN, {}).get(entry.entry_id)
             if runtime is not None:
                 # Locking also prevents an action from changing the FIFO while
@@ -80,7 +99,7 @@ class HeatingQueueOptionsFlow(OptionsFlowWithReload):
                     bindings = saved["bindings"]
                     active = saved["active"]
                     if not set(bindings.values()).issubset(selected):
-                        errors["base"] = "relays_in_use"
+                        errors["base"] = "entities_in_use"
                     elif new_limit < len(active):
                         errors["base"] = "max_active_below_reserved"
                     if not errors:
@@ -102,7 +121,7 @@ class HeatingQueueOptionsFlow(OptionsFlowWithReload):
                     if not isinstance(bindings, dict) or not isinstance(active, list):
                         raise ValueError("Invalid stored queue")
                     if not set(bindings.values()).issubset(selected):
-                        errors["base"] = "relays_in_use"
+                        errors["base"] = "entities_in_use"
                     elif new_limit < len(active):
                         errors["base"] = "max_active_below_reserved"
                 except Exception:
@@ -111,7 +130,7 @@ class HeatingQueueOptionsFlow(OptionsFlowWithReload):
             if not errors:
                 return self.async_create_entry(
                     data={
-                        CONF_MONITORED_RELAYS: selected,
+                        CONF_MONITORED_ENTITIES: selected,
                         CONF_MAX_ACTIVE: new_limit,
                     }
                 )
@@ -121,11 +140,9 @@ class HeatingQueueOptionsFlow(OptionsFlowWithReload):
                 vol.Required(
                     CONF_MAX_ACTIVE,
                     default=new_limit,
-                ): vol.All(
-                    vol.Coerce(int), vol.Range(min=1, max=50)
-                ),
+                ): MAX_ACTIVE_SELECTOR,
                 vol.Optional(
-                    CONF_MONITORED_RELAYS,
+                    CONF_MONITORED_ENTITIES,
                     default=selected,
                 ): EntitySelector(
                     EntitySelectorConfig(

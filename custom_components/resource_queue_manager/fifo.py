@@ -1,4 +1,4 @@
-"""Pure-Python FIFO reservation engine. Never controls relays directly."""
+"""Pure-Python FIFO reservation engine. Never controls entities directly."""
 
 from collections import deque
 from dataclasses import dataclass
@@ -13,10 +13,10 @@ class QueueResult:
     waiting: tuple[str, ...]
 
 
-class HeatingQueue:
+class ResourceQueue:
     """First-in, first-out scheduler with a hard reservation count limit.
 
-    The caller owns all physical switching and must confirm a relay is OFF
+    The caller owns all physical switching and must confirm a entity is OFF
     before releasing its reservation. Requests and releases should be
     serialized by the integration's coordinator.
     """
@@ -34,7 +34,7 @@ class HeatingQueue:
         max_active: int,
         active: object,
         waiting: object,
-    ) -> "HeatingQueue":
+    ) -> "ResourceQueue":
         """Restore an exact ordering without granting any new reservations.
 
         Invalid or inconsistent persisted data is rejected, never silently
@@ -44,11 +44,11 @@ class HeatingQueue:
         if not isinstance(active, list) or not isinstance(waiting, list):
             raise ValueError("stored active and waiting must be lists")
 
-        all_heaters = active + waiting
-        if any(not isinstance(value, str) or not value.strip() or value != value.strip() for value in all_heaters):
-            raise ValueError("stored heater IDs must be non-empty normalized strings")
-        if len(all_heaters) != len(set(all_heaters)):
-            raise ValueError("duplicate heater ID in saved queue")
+        all_resources = active + waiting
+        if any(not isinstance(value, str) or not value.strip() or value != value.strip() for value in all_resources):
+            raise ValueError("stored resource IDs must be non-empty normalized strings")
+        if len(all_resources) != len(set(all_resources)):
+            raise ValueError("duplicate resource ID in saved queue")
         if len(active) > max_active:
             raise ValueError("saved reservations exceed current limit")
         if waiting and len(active) < max_active:
@@ -58,19 +58,19 @@ class HeatingQueue:
         instance._waiting = deque(waiting)
         return instance
 
-    def request(self, heater_id: str) -> QueueResult:
+    def request(self, resource_id: str) -> QueueResult:
         """Enqueue a request; immediately grant if capacity is available."""
-        self._validate_id(heater_id)
-        if heater_id not in self._active and heater_id not in self._waiting:
-            self._waiting.append(heater_id)
+        self._validate_id(resource_id)
+        if resource_id not in self._active and resource_id not in self._waiting:
+            self._waiting.append(resource_id)
         return self._allocate()
 
-    def release(self, heater_id: str) -> QueueResult:
+    def release(self, resource_id: str) -> QueueResult:
         """Release reservation or withdraw a pending request."""
-        self._validate_id(heater_id)
-        self._active.pop(heater_id, None)
+        self._validate_id(resource_id)
+        self._active.pop(resource_id, None)
         try:
-            self._waiting.remove(heater_id)
+            self._waiting.remove(resource_id)
         except ValueError:
             pass
         return self._allocate()
@@ -99,6 +99,6 @@ class HeatingQueue:
         )
 
     @staticmethod
-    def _validate_id(heater_id: str) -> None:
-        if not isinstance(heater_id, str) or not heater_id.strip():
-            raise ValueError("heater_id must be a non-empty string")
+    def _validate_id(resource_id: str) -> None:
+        if not isinstance(resource_id, str) or not resource_id.strip():
+            raise ValueError("resource_id must be a non-empty string")

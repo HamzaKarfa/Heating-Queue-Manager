@@ -1,0 +1,77 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Initial configuration",
+        "description": "Choose how many resources may hold a reservation at the same time. You can adjust this limit and select supervised entities later under Configure.",
+        "data": {
+          "max_active": "Concurrent reservations"
+        },
+        "data_description": {
+          "max_active": "Enter a whole number from 1 to 50. Suggested starting value: 3."
+        }
+      }
+    }
+  },
+  "services": {
+    "request": {
+      "name": "Request slot",
+      "description": "Request a FIFO slot without actuating an entity.",
+      "fields": {
+        "resource_id": {
+          "name": "Resource ID",
+          "description": "Stable resource identifier, for example zone_1."
+        },
+        "entity_id": {
+          "name": "Supervised entity",
+          "description": "Supervised light or switch entity that must be OFF before release."
+        }
+      }
+    },
+    "release": {
+      "name": "Release slot",
+      "description": "Release a reservation only if Home Assistant reports its entity OFF.",
+      "fields": {
+        "resource_id": {
+          "name": "Resource ID",
+          "description": "Previously requested resource ID."
+        }
+      }
+    },
+    "cancel": {
+      "name": "Cancel request",
+      "description": "Remove a waiting request or release an OFF reservation.",
+      "fields": {
+        "resource_id": {
+          "name": "Resource ID",
+          "description": "Previously requested resource ID."
+        }
+      }
+    },
+    "resume": {
+      "name": "Resume queue after restart",
+      "description": "Verify supervised entities and resume FIFO grants. Inspect equipment before recovery."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Resources and capacity",
+        "description": "Choose which resources can request a FIFO slot and set the queue capacity.",
+        "data": {
+          "monitored_entities": "Supervised entities",
+          "max_active": "Concurrent reservations"
+        },
+        "data_description": {
+          "max_active": "Maximum active reservations at once (1–50). Existing reservations are preserved.",
+          "monitored_entities": "Select the light/switch entities controlled by your automations. Other entities will be ignored."
+        }
+      }
+    },
+    "error": {
+      "storage_unavailable": "Cannot read saved bookings. Configuration unchanged.",
+      "max_active_below_reserved": "Cannot reduce the limit below the number of currently active reservations.",
+      "entities_in_use": "Cannot deselect an entity with an active or waiting reservation."
+    }
+  }
+}
