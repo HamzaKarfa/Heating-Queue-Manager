@@ -12,7 +12,7 @@
 
 **Resource Queue Manager** is a Home Assistant custom integration for coordinating **logical reservations** across multiple independently configured queues. Each queue owns its capacity, supervised entities, persistent state and scheduling strategy.
 
-> **Release preparation — v1.0.0 development branch.** This README documents the code in `feat/v1-multi-queue-strategies`. Version 1.0.0 is **not yet published**. The Marketplace/default branch remains the stable v0.4 release until the PR is reviewed, merged and a GitHub Release is deliberately created. Do not use a heater or other safety-critical load as your first test.
+> **Pre-release candidate v1.0.0-rc.1 — testing only.** This snapshot is built from `release/v1.0.0-rc.1`. The **v0.4.0 stable release remains unchanged**. This candidate is not recommended for production, and no final v1 release has been published. See [RC notes](docs/releases/v1.0.0-rc.1.md). Do not use a heater or other safety-critical load as your first test.
 
 > **Important:** Resource Queue Manager never switches devices ON or OFF. Your automations do that after obtaining a grant. It is **not a certified electrical load-shedding, thermal safety or overcurrent protection device**. Manual commands, external automation and unsupervised equipment can bypass it.
 
@@ -247,6 +247,6 @@ python -m pytest -q tests/ha/test_integration.py
 
 CI also validates HACS/Marketplace metadata and Home Assistant hassfest. Tests simulate Home Assistant states, **not physical devices**. See [DEVELOPMENT.md](docs/DEVELOPMENT.md) for environment setup and plugin development.
 
-This branch stages manifest version **1.0.0** for review. The version in `manifest.json` is the component version; the GitHub Release tag will be `v1.0.0` when explicitly published after merging. **No merge, tag or public release is performed by pushing these preparation commits.**
+**This RC branch uses manifest version `1.0.0-rc.1`**, matching the proposed GitHub tag `v1.0.0-rc.1`. The separate feature PR retains the planned final `1.0.0` manifest. This RC will be distributed only after explicitly creating a GitHub pre-release marked **Pre-release**, not **Latest**. The final `v1.0.0` release must be published later through the guarded manual workflow after reviewing and merging the feature PR.
 
 The repository is distributed under the [MIT License](LICENSE).
