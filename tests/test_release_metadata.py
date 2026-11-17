@@ -1,0 +1,65 @@
+"""Validate release metadata and translation parity without Home Assistant."""
+
+import json
+from pathlib import Path
+import re
+import unittest
+
+
+ROOT = Path(__file__).resolve().parents[1]
+INTEGRATION = ROOT / "custom_components" / "resource_queue_manager"
+
+
+def leaf_paths(value, prefix=""):
+    """Return all nested translation keys, not the translated wording."""
+    if isinstance(value, dict):
+        result = set()
+        for name, item in value.items():
+            path = f"{prefix}.{name}" if prefix else name
+            result.update(leaf_paths(item, path))
+        return result
+    return {prefix}
+
+
+class ReleaseMetadataTests(unittest.TestCase):
+    def test_manifest_matches_hacs_and_release_notes(self):
+        manifest = json.loads((INTEGRATION / "manifest.json").read_text("utf-8"))
+        hacs = json.loads((ROOT / "hacs.json").read_text("utf-8"))
+        version = manifest["version"]
+        self.assertRegex(version, r"^\d+\.\d+\.\d+$")
+        self.assertEqual(hacs["name"], manifest["name"])
+        self.assertTrue(manifest["config_flow"])
+        self.assertTrue((ROOT / "docs" / "releases" / f"v{version}.md").is_file())
+        self.assertTrue((ROOT / "docs" / "DEVELOPMENT.md").is_file())
+        self.assertTrue((ROOT / "docs" / "MIGRATION_v0.4_to_v1.md").is_file())
+        self.assertTrue((ROOT / "docs" / "V1_ARCHITECTURE.md").is_file())
+
+    def test_english_and_french_ui_keys_match_strings(self):
+        original = json.loads((INTEGRATION / "strings.json").read_text("utf-8"))
+        reference = leaf_paths(original)
+        for name in ("en.json", "fr.json"):
+            with self.subTest(locale=name):
+                other = json.loads(
+                    (INTEGRATION / "translations" / name).read_text("utf-8")
+                )
+                self.assertEqual(reference, leaf_paths(other))
+                for section in ("config", "options", "services"):
+                    self.assertIn(section, other)
+
+    def test_v1_release_is_manual_only(self):
+        yaml_path = ROOT / ".github" / "workflows" / "publish-v1.yml"
+        source = yaml_path.read_text("utf-8")
+        self.assertIn("workflow_dispatch:", source)
+        self.assertIn("PUBLISH_V1_0_0", source)
+        self.assertIn("refs/heads/main", source)
+        self.assertIn("docs/releases/v1.0.0.md", source)
+        self.assertIsNone(
+            re.search(r"(?m)^\s{2}(push|pull_request|schedule):", source)
+        )
+        self.assertFalse(
+            (ROOT / ".github" / "workflows" / "publish-v0.4.0.yml").exists()
+        )
+
+
+if __name__ == "__main__":
+    unittest.main()
