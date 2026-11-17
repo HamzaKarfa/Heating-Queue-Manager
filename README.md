@@ -100,6 +100,12 @@ With **exactly one configured queue**, old v0.4 calls with no `config_entry_id` 
 
 ## Actions, events and safe reservation lifecycle
 
+Home Assistant's **Developer tools → Actions** exposes the native `request`, `release`, `cancel` and `resume` actions (with localized labels). The screenshot below shows the actions as they appear in a French-language Home Assistant instance.
+
+![Resource Queue Manager actions in Home Assistant — request, release, cancel and resume](assets/resource-queue-manager-actions.webp)
+
+**Quick UI smoke test on a noncritical device:** select `resource_queue_manager.resume` for the **test queue** after verifying supervised devices; call `request` using that queue's `config_entry_id`, a unique `resource_id` and a supervised test `entity_id`; confirm the corresponding `active` sensor increments; keep the test device OFF and call `release`; confirm the count returns to its previous value. Also test `cancel` on a waiting request. Never test first with a live heater or bypass physical protections.
+
 | Action | Required data | Optional data | Purpose |
 | --- | --- | --- | --- |
 | `resource_queue_manager.request` | `resource_id`, `entity_id` | `config_entry_id`, `strategy_data` | Acquire capacity or join a waiting queue |
