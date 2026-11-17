@@ -233,7 +233,8 @@ class ResourceQueueOptionsFlow(OptionsFlowWithReload):
                         self.hass, STORAGE_VERSION, f"{DOMAIN}.{entry.entry_id}"
                     )
                     saved = await store.async_load()
-                    bindings = {} if saved is None else saved["bindings"]
+                    saved = {} if saved is None else saved
+                    bindings = saved.get("bindings", {})
                     active = [] if saved is None else saved["active"]
                     waiting = [] if saved is None else saved["waiting"]
                     if (
