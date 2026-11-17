@@ -7,6 +7,8 @@ imports or directly controls Home Assistant entities.
 
 from collections import deque
 from collections.abc import Mapping
+
+from .request import QueueRequest
 from dataclasses import dataclass
 from typing import Literal, Protocol
 
@@ -17,8 +19,13 @@ class QueueStrategy(Protocol):
     key: str
     label: str
 
-    def enqueue(self, waiting: deque[str], resource_id: str) -> None:
-        """Insert a pending resource in next-grant order."""
+    def enqueue(
+        self,
+        waiting: deque[str],
+        request: QueueRequest,
+        requests: Mapping[str, QueueRequest],
+    ) -> None:
+        """Insert a request; lookup exposes metadata of existing waiters."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -43,6 +50,7 @@ class StrategyProvider(Protocol):
     label: str
     description: str
     config_fields: tuple[StrategyConfigField, ...]
+    request_fields: tuple[StrategyConfigField, ...]
 
     def create(
         self, config: Mapping[str, object] | None = None
