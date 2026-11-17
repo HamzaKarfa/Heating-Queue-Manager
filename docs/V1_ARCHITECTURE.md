@@ -32,11 +32,13 @@ custom_components/resource_queue_manager/
 └── strategies/
     ├── __init__.py
     ├── base.py                # QueueStrategy, StrategyProvider, config descriptors
-    ├── registry.py            # Explicit provider registration and resolution
+    ├── registry.py            # Explicit provider registration and validation
+    ├── request.py             # QueueRequest: ID plus validated metadata
     ├── fifo/
     │   ├── __init__.py
     │   ├── provider.py        # FifoProvider
     │   ├── config.py          # Strategy-specific configuration fields
+    │   ├── request.py         # Per-request field declarations
     │   └── strategy.py        # FIFO algorithm
     └── lifo/
         ├── __init__.py
@@ -53,10 +55,11 @@ The dependency direction is **Home Assistant adapter → coordinator → engine 
 
 - `key`: stable identifier used in config entries and saved snapshots.
 - `label` and `description`: user-facing metadata.
-- `config_fields`: declarative field definitions owned by that strategy's `config.py`.
+- `config_fields`: declarative entry-setting definitions owned by `config.py`.
+- `request_fields`: optional per-request field definitions owned by `request.py`.
 - `create(config)`: constructs a new policy instance using validated settings.
 
-`QueueStrategy` currently requires `enqueue(waiting, resource_id)`. This is sufficient for FIFO and non-preemptive LIFO. The engine consumes from the left of the pending deque and always enforces capacity.
+`QueueStrategy` now implements `enqueue(waiting, request, requests)`, where `request` is a `QueueRequest(resource_id, data)` and `requests` lets an algorithm inspect metadata of other queued resources. The engine consumes from the left of the waiting deque and always enforces capacity. FIFO/LIFO ignore request metadata; a custom algorithm can use it to reorder the queue without editing the engine.
 
 `registry.py` explicitly registers provider instances. The Home Assistant strategy dropdown now reads its labels and values directly from the registry. This avoids adding hard-coded strategy names to `config_flow.py` every time another simple strategy is registered.
 
@@ -82,7 +85,23 @@ CONFIG_FIELDS = (
 )
 ```
 
-Those fields would automatically appear in the host's additional strategy form. Each new plugin still needs appropriate English translation keys for its fields. The host also needs separate integration work for **new per-request payloads** (such as `priority`) and any policy-specific snapshot format; `StrategyConfigField` currently describes *queue configuration*, not request metadata. It must not bypass the host's entity safety checks or change persisted ordering silently.
+Those fields would automatically appear in the host's additional strategy form. Each new plugin still needs appropriate English translation keys for its fields. Per-request fields are now declared separately through a plugin's `request.py` and `request_fields` provider attribute. The common Home Assistant `request` action exposes an **optional `strategy_data` object** whose keys are checked strictly against that selected provider's request schema. The engine receives a `QueueRequest(resource_id, data)` and persists non-empty data in a new `request_data` mapping alongside the existing ID-only `active`/`waiting` lists. Older snapshots missing `request_data` restore normally for FIFO/LIFO.
+
+For a future priority plugin, a request could look like:
+
+```yaml
+action: resource_queue_manager.request
+data:
+  config_entry_id: "replace_with_config_entry_id"
+  resource_id: bedroom
+  entity_id: switch.heater_bedroom
+  strategy_data:
+    priority: 7
+```
+
+**This is a future-plugin example, not a currently supported FIFO/LIFO payload.** Both shipped policies intentionally reject unknown request metadata. No priority strategy is registered in this branch. A test-only strategy validates that priorities can reorder pending resources and survive a restart without changing the core engine. The host retains full control over state checks and does not actuate physical devices.
+
+For richer per-request fields, adding Home Assistant labels to `services.yaml` remains a documentation/UI task; the stable extensibility interface is the validated `strategy_data` object. Provider-supplied code or services are **not automatically executed**.
 
 ### Adding an algorithm
 
@@ -91,7 +110,7 @@ Those fields would automatically appear in the host's additional strategy form. 
 3. Add `provider.py` implementing `StrategyProvider` and creating an independent strategy instance.
 4. Register the provider in `strategies/registry.py`.
 5. Add policy, persistence/restart and Home Assistant integration tests.
-6. For strategies with extra settings or request payloads, extend the host's generic config/request adapter and migration format **before enabling the strategy**.
+6. Declare per-request fields in `request.py` when needed; provide validation, serialization, ordering and upgrade tests before enabling the strategy.
 
 Active reservations are never preempted. For current FIFO/LIFO policies the waiting deque stores requests in the order they will be granted. The v1 branch prohibits changing algorithms while active or waiting requests remain.
 
