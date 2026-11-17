@@ -1,7 +1,13 @@
 # Release acceptance checklist — Resource Queue Manager v1.0.0
 
 **Maintainer checklist only — not GitHub Release notes.**
-Do not merge PR #9 or publish `v1.0.0` while any required acceptance gate is unresolved.
+
+**Release decision (2026-11-17):** The maintainer explicitly authorized publishing
+v1.0.0 as stable before completing the manual acceptance gates, with testing
+on a live installation and follow-up fixes if needed. The unchecked manual
+gates below remain **unverified**, not passed. Avoid treating this release as
+an electrical or thermal safety control; preserve the physical protections
+and rollback backup. Any regression should be fixed in a patch release.
 The existing `v1.0.0-rc.2` tag is immutable; its working branch is kept for reference
 until the stable version is published. Tests of the RC do **not** validate later
 changes on the feature branch (notably generic entity supervision).
