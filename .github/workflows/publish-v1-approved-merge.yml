@@ -1,0 +1,117 @@
+name: Publish v1.0.0 (authorized PR #9 merge)
+
+# One-time authorized publication after the specific v1 merge commit.
+# Deliberately inert for all other main pushes and all pull requests.
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: resource-queue-manager-publish-v1.0.0
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    if: startsWith(github.event.head_commit.message, 'release: authorize v1.0.0 stable (PR #9)')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 3
+      - name: Verify explicitly authorized merge and release manifest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "refs/heads/main" || exit 1
+          test "$(git log -1 --format=%s)" = "release: authorize v1.0.0 stable (PR #9)" || exit 1
+          # Exactly two parents: merge commit on main, not a direct push.
+          test "$(git rev-list --parents -n 1 HEAD | wc -w)" -eq 3 || {
+            echo "::error::Expected a two-parent PR merge commit"; exit 1;
+          }
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          manifest = json.loads(Path("custom_components/resource_queue_manager/manifest.json").read_text())
+          hacs = json.loads(Path("hacs.json").read_text())
+          assert manifest["version"] == "1.0.0", "Wrong manifest version"
+          assert manifest["name"] == "Resource Queue Manager"
+          assert manifest["integration_type"] == "service"
+          assert hacs["name"] == manifest["name"]
+          notes = Path("docs/releases/v1.0.0.md").read_text()
+          assert notes.startswith("# Resource Queue Manager — v1.0.0")
+          assert all(marker not in notes for marker in (
+              "not yet published", "Prepared release notes", "- [ ]"
+          )), "Release notes still contain draft content"
+          assert Path("docs/MIGRATION_v0.4_to_v1.md").is_file()
+          assert Path("docs/RELEASE_CHECKLIST_v1.md").is_file()
+          PY
+          if gh release view v1.0.0 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::error::Release v1.0.0 already exists"; exit 1
+          fi
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/v1.0.0" >/dev/null 2>&1; then
+            echo "::error::Tag v1.0.0 already exists"; exit 1
+          fi
+
+  tests:
+    needs: preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      - name: Run pure Python and release metadata checks
+        run: python -m unittest discover -s tests -v
+      - name: Install Home Assistant 2026.11 fixtures
+        run: python -m pip install "pytest-homeassistant==2026.11.1"
+      - name: Run integration tests
+        run: python -m pytest -q tests/ha
+
+  hacs:
+    needs: preflight
+    runs-on: ubuntu-latest
+    steps:
+      - name: HACS validation
+        uses: hacs/action@main
+        with:
+          category: integration
+
+  hassfest:
+    needs: preflight
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Home Assistant manifest validation
+        uses: home-assistant/actions/hassfest@master
+
+  publish:
+    needs: [preflight, tests, hacs, hassfest]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create stable GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # Guard again after tests; never overwrite an existing tag or release.
+          if gh release view v1.0.0 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::error::Release v1.0.0 exists"; exit 1
+          fi
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/v1.0.0" >/dev/null 2>&1; then
+            echo "::error::Tag v1.0.0 exists"; exit 1
+          fi
+          gh release create v1.0.0 \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "Resource Queue Manager v1.0.0" \
+            --notes-file docs/releases/v1.0.0.md \
+            --latest
