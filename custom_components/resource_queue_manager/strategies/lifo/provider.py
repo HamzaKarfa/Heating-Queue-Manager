@@ -3,6 +3,7 @@
 from collections.abc import Mapping
 
 from .config import CONFIG_FIELDS
+from .request import REQUEST_FIELDS
 from .strategy import LifoStrategy
 
 
@@ -13,6 +14,7 @@ class LifoProvider:
     label = LifoStrategy.label
     description = "Newest waiting request is granted first; active work is never preempted."
     config_fields = CONFIG_FIELDS
+    request_fields = REQUEST_FIELDS
 
     def create(self, config: Mapping[str, object] | None = None) -> LifoStrategy:
         if config:
