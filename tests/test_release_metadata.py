@@ -34,6 +34,13 @@ class ReleaseMetadataTests(unittest.TestCase):
         self.assertTrue((ROOT / "docs" / "MIGRATION_v0.4_to_v1.md").is_file())
         self.assertTrue((ROOT / "docs" / "V1_ARCHITECTURE.md").is_file())
 
+    def test_action_config_entry_selector_can_find_queue_instances(self):
+        """The HA frontend picker lists device/hub/service, not helper entries."""
+        manifest = json.loads((INTEGRATION / "manifest.json").read_text("utf-8"))
+        self.assertEqual(manifest["integration_type"], "service")
+        services = (INTEGRATION / "services.yaml").read_text("utf-8")
+        self.assertEqual(services.count("integration: resource_queue_manager"), 4)
+
     def test_english_and_french_ui_keys_match_strings(self):
         original = json.loads((INTEGRATION / "strings.json").read_text("utf-8"))
         reference = leaf_paths(original)
