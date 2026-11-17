@@ -10,7 +10,7 @@
 
 **Français :** [guide d'installation, configuration et migration](README.fr.md).
 
-**Resource Queue Manager** is a Home Assistant custom integration for coordinating **logical reservations** across multiple independently configured queues. Each queue owns its capacity, supervised entities, persistent state and scheduling strategy.
+**Resource Queue Manager** manages multiple independent resource queues in Home Assistant with **FIFO, LIFO and priority-based scheduling**, configurable capacity and persistent reservations. Each queue has its own supervised entities and state. It coordinates logical grants; your automations remain responsible for switching devices.
 
 > **Release preparation — v1.0.0 development branch.** This README documents the code in `feat/v1-multi-queue-strategies`. Version 1.0.0 is **not yet published**. The Marketplace/default branch remains the stable v0.4 release until the PR is reviewed, merged and a GitHub Release is deliberately created. Do not use a heater or other safety-critical load as your first test.
 
