@@ -21,7 +21,7 @@ request:
     strategy_data:
       required: false
       selector:
-        object:
+        object: {}
 
 release:
   fields:
