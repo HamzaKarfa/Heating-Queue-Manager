@@ -11,6 +11,7 @@ CONF_MONITORED_ENTITIES = "monitored_entities"
 
 ATTR_RESOURCE_ID = "resource_id"
 ATTR_ENTITY_ID = "entity_id"
+ATTR_STRATEGY_DATA = "strategy_data"
 SERVICE_REQUEST = "request"
 SERVICE_RELEASE = "release"
 SERVICE_CANCEL = "cancel"
