@@ -19,6 +19,7 @@ from .const import (
     ATTR_ENTITY_ID,
     CONF_MAX_ACTIVE,
     CONF_STRATEGY,
+    CONF_STRATEGY_CONFIG,
     CONF_MONITORED_ENTITIES,
     DEFAULT_MAX_ACTIVE,
     DOMAIN,
@@ -202,6 +203,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     strategy = entry.options.get(
         CONF_STRATEGY, entry.data.get(CONF_STRATEGY, DEFAULT_STRATEGY)
     )
+    strategy_config = entry.options.get(
+        CONF_STRATEGY_CONFIG, entry.data.get(CONF_STRATEGY_CONFIG, {})
+    )
     store = Store(
         hass, STORAGE_VERSION, f"{DOMAIN}.{entry.entry_id}"
     )
@@ -216,6 +220,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 entity_state=get_entity_state,
                 monitored_entities=supervised,
                 strategy=strategy,
+                strategy_config=strategy_config,
             )
         else:
             manager = ResourceQueueCoordinator.from_state(
@@ -227,6 +232,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 saved=saved,
                 monitored_entities=supervised,
                 strategy=strategy,
+                strategy_config=strategy_config,
                 legacy_max_active=entry.data.get(
                     CONF_MAX_ACTIVE, DEFAULT_MAX_ACTIVE
                 ),
