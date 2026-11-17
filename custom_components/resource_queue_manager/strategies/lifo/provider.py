@@ -12,6 +12,7 @@ class LifoProvider:
 
     key = "lifo"
     label = LifoStrategy.label
+    localized_labels = {"fr": "LIFO — dernier arrivé, premier servi"}
     description = "Newest waiting request is granted first; active work is never preempted."
     config_fields = CONFIG_FIELDS
     request_fields = REQUEST_FIELDS
