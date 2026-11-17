@@ -46,19 +46,18 @@ Waiting (1):   hallway
 
 The next waiting resource is granted automatically when a slot is released. Granting a slot **does not turn the device ON**.
 
-```mermaid
-flowchart TD
-    A["Automation requests a reservation"] --> B{"Capacity available?"}
-    B -->|Yes| C["Resource becomes active"]
-    B -->|No| D["Resource waits in FIFO order"]
-    D -->|A slot is released| C
-    C --> E["Your automation turns device ON"]
-    E --> F["Your automation turns device OFF"]
-    F --> G{"Home Assistant reports OFF?"}
-    G -->|Yes| H["Release the reservation"]
-    G -->|No| I["Keep reservation; investigate"]
-    H --> J["Next waiting resource can be granted"]
-```
+### Reservation lifecycle
+
+1. **Request** — An automation calls `resource_queue_manager.request` for a supervised device.
+2. **Grant or wait** — If a slot is available, the reservation becomes **active**. Otherwise, the request enters the **FIFO waiting list**.
+3. **Switch ON** — Only after confirming that the reservation is active, **your automation** may switch the device ON.
+4. **Switch OFF** — Your automation turns the device OFF when it has finished.
+5. **Verify** — Home Assistant must report the device state as `off`. If it does not, **keep the reservation and investigate**.
+6. **Release** — Your automation calls `resource_queue_manager.release`. The **oldest waiting request** can then take the available slot.
+
+**Request → Active or Waiting → Grant → Device ON → Device OFF → OFF confirmed → Release → Next request**
+
+The steps above use standard Markdown so the process stays readable in GitHub's mobile app, even when diagram rendering is unavailable.
 
 **Important:** all requests are blocked while the queue is `paused`. After every Home Assistant startup or integration reload, check the equipment and call `resource_queue_manager.resume` manually. Active reservations and waiting order persist across restarts, but grants do not resume on their own.
 
