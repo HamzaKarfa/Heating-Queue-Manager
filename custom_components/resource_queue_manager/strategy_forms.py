@@ -48,7 +48,7 @@ def strategy_form_schema(
             selector = SelectSelector(
                 SelectSelectorConfig(
                     options=[
-                        SelectOptionDict(value=choice, label=choice)
+                        SelectOptionDict(value=choice, label=choice.replace("_", " ").capitalize())
                         for choice in field.choices
                     ],
                     mode=SelectSelectorMode.DROPDOWN,
