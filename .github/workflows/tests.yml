@@ -1,4 +1,4 @@
-name: FIFO tests
+name: Core and strategy tests
 
 on:
   push:
@@ -15,5 +15,5 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Run isolated FIFO tests
+      - name: Run core, strategy, recovery and release metadata tests
         run: python -m unittest discover -s tests -v
