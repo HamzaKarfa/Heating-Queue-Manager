@@ -1,4 +1,9 @@
-"""Framework-agnostic contracts for strategy plugins."""
+"""Framework-agnostic contracts for strategy plugins.
+
+Strategy providers declare configuration using simple Python data objects.
+The Home Assistant adapter decides how to render them; plugin code never
+imports or directly controls Home Assistant entities.
+"""
 
 from collections import deque
 from collections.abc import Mapping
@@ -7,22 +12,18 @@ from typing import Literal, Protocol
 
 
 class QueueStrategy(Protocol):
-    """Scheduling policy; Home Assistant and persistence stay in the host."""
+    """Choose pending order; capacity and safety remain with the host engine."""
 
     key: str
     label: str
 
     def enqueue(self, waiting: deque[str], resource_id: str) -> None:
-        """Insert a pending resource in its next-grant position."""
+        """Insert a pending resource in next-grant order."""
 
 
 @dataclass(frozen=True, slots=True)
 class StrategyConfigField:
-    """Declarative strategy-specific settings for a future HA options form.
-
-    Form implementations should map these descriptors to Home Assistant
-    selectors rather than importing Home Assistant from the core engine.
-    """
+    """Declarative, JSON-compatible strategy option for a native HA selector."""
 
     key: str
     label: str
@@ -30,10 +31,13 @@ class StrategyConfigField:
     required: bool = False
     default: str | int | float | bool | None = None
     description: str = ""
+    choices: tuple[str, ...] = ()
+    minimum: float | None = None
+    maximum: float | None = None
 
 
 class StrategyProvider(Protocol):
-    """Plugin entry point, analogous to a framework service provider."""
+    """One registered plugin, analogous to a Laravel service provider."""
 
     key: str
     label: str
@@ -43,4 +47,4 @@ class StrategyProvider(Protocol):
     def create(
         self, config: Mapping[str, object] | None = None
     ) -> QueueStrategy:
-        """Build a policy instance for one independent resource queue."""
+        """Create an isolated policy instance with validated settings."""
