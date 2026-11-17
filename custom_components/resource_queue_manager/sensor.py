@@ -1,4 +1,4 @@
-"""Read-only sensors exposing FIFO reservations and recovery readiness."""
+"""Read-only sensors exposing resource reservations and recovery readiness."""
 
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
@@ -26,7 +26,7 @@ async def async_setup_entry(
 
 
 class ResourceQueueSensor(SensorEntity):
-    """A FIFO counter or a readiness indicator with queue attributes."""
+    """A queue counter or a readiness indicator with reservation attributes."""
 
     _attr_should_poll = False
     _attr_icon = "mdi:playlist-check"
@@ -67,7 +67,7 @@ class ResourceQueueSensor(SensorEntity):
 
     @property
     def extra_state_attributes(self) -> dict:
-        """Include current and pending FIFO order for dashboards."""
+        """Include current and pending request order for dashboards."""
         snapshot = self._manager.snapshot()
         return {
             "active": list(snapshot.active),
