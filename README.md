@@ -18,6 +18,8 @@ The FIFO engine is generic: a request is assigned a reservation immediately when
 
 > **Experimental software scheduler, not a safety-rated electrical load-shedding system.** Independent loads, external automations and manual switches can bypass its reservations. Keep electrical and thermal safety protections in place.
 
+> **v1 development branch:** Multiple independent queues and FIFO/LIFO strategy selection are under development. This branch is not a v1 release; see [v1 architecture and migration notes](docs/V1_ARCHITECTURE.md). The published v0.4 installation instructions below describe the stable release.
+
 ## Features
 
 - FIFO allocation with an adjustable concurrent reservation limit (1–50, initially 3).
