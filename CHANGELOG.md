@@ -4,11 +4,11 @@ All notable changes to Resource Queue Manager are documented here.
 Versions follow Semantic Versioning; the Home Assistant manifest version and
 GitHub Release tag are intended to match (`1.0.0` ↔ `v1.0.0`).
 
-## [1.0.0] — Unreleased (development branch)
+## [1.0.0]
 
-**Multi-instance and strategy-provider architecture.** This version is staged
-in the `feat/v1-multi-queue-strategies` branch and has **not** been tagged or
-published.
+**Multi-instance and strategy-provider architecture.** Version 1 introduces
+multiple independent queues, additional strategies, and domain-aware entity
+supervision while preserving existing v0.4 FIFO entry and storage compatibility.
 
 ### Added
 
