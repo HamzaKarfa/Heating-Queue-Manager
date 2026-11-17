@@ -3,6 +3,11 @@
 from collections import deque
 from dataclasses import dataclass
 
+if __package__:
+    from .strategies import DEFAULT_STRATEGY, get_strategy
+else:  # Standalone pure-Python tests import fifo.py directly.
+    from strategies import DEFAULT_STRATEGY, get_strategy
+
 
 @dataclass(frozen=True, slots=True)
 class QueueResult:
@@ -21,10 +26,12 @@ class ResourceQueue:
     serialized by the integration's coordinator.
     """
 
-    def __init__(self, max_active: int = 3) -> None:
+    def __init__(self, max_active: int = 3, strategy: str = DEFAULT_STRATEGY) -> None:
         if not isinstance(max_active, int) or isinstance(max_active, bool) or max_active < 1:
             raise ValueError("max_active must be a positive integer")
         self.max_active = max_active
+        self.strategy = strategy
+        self._strategy = get_strategy(strategy)
         self._active: dict[str, None] = {}
         self._waiting: deque[str] = deque()
 
@@ -34,13 +41,14 @@ class ResourceQueue:
         max_active: int,
         active: object,
         waiting: object,
+        strategy: str = DEFAULT_STRATEGY,
     ) -> "ResourceQueue":
         """Restore an exact ordering without granting any new reservations.
 
         Invalid or inconsistent persisted data is rejected, never silently
         converted into an empty queue.
         """
-        instance = cls(max_active)
+        instance = cls(max_active, strategy)
         if not isinstance(active, list) or not isinstance(waiting, list):
             raise ValueError("stored active and waiting must be lists")
 
@@ -62,7 +70,7 @@ class ResourceQueue:
         """Enqueue a request; immediately grant if capacity is available."""
         self._validate_id(resource_id)
         if resource_id not in self._active and resource_id not in self._waiting:
-            self._waiting.append(resource_id)
+            self._strategy.enqueue(self._waiting, resource_id)
         return self._allocate()
 
     def release(self, resource_id: str) -> QueueResult:
