@@ -14,40 +14,69 @@ One Home Assistant integration can manage multiple independent configuration ent
 
 **No entity may be supervised by two entries.** Queues do not share a global capacity. The integration does **not** switch physical devices.
 
-## Modules
+## Plugin architecture (service-provider model)
+
+Each algorithm is a self-contained Python package. The host integration owns
+physical-device safety, persistence, config-entry lifecycle and service routing;
+the plugin supplies policy logic, registration metadata and configuration
+descriptors. This intentionally resembles a Laravel service provider.
 
 ```text
 custom_components/resource_queue_manager/
-├── strategies.py   # QueueStrategy protocol, built-in policies, registry
-├── engine.py       # ResourceQueue/QueueResult, generic reservation engine
-├── fifo.py         # Legacy import compatibility shim
-├── coordinator.py  # One queue's bindings, safety checks, storage serialization
-├── config_flow.py  # Independent entry creation and per-entry options
-├── __init__.py     # Home Assistant entry lifecycle, services, persistence
-├── sensor.py       # Four read-only sensors per entry
-└── services.yaml   # Explicit config-entry selector for actions
+├── engine.py                  # Generic reservation engine
+├── coordinator.py             # Safety, persistence data and entity bindings
+├── config_flow.py             # Shared Home Assistant UI and per-entry options
+├── sensor.py                  # Per-entry sensors
+├── services.yaml              # Shared HA action declarations
+└── strategies/
+    ├── __init__.py
+    ├── base.py                # QueueStrategy, StrategyProvider, config descriptors
+    ├── registry.py            # Explicit provider registration and resolution
+    ├── fifo/
+    │   ├── __init__.py
+    │   ├── provider.py        # FifoProvider
+    │   ├── config.py          # Strategy-specific configuration fields
+    │   └── strategy.py        # FIFO algorithm
+    └── lifo/
+        ├── __init__.py
+        ├── provider.py        # LifoProvider
+        ├── config.py          # Strategy-specific configuration fields
+        └── strategy.py        # LIFO algorithm
 ```
 
-The direction of dependencies is: **HA adapter → coordinator → generic engine → strategy**. Strategy implementations must be pure Python and must not import Home Assistant.
+The dependency direction is **Home Assistant adapter → coordinator → engine → provider-created strategy**. The strategy packages themselves contain no Home Assistant imports. Every queue receives its **own instance** of the selected policy.
 
-### Strategy contract
+### Provider contract
 
-Each strategy implements `QueueStrategy.enqueue(waiting, resource_id)`. The engine always consumes the left-most pending request. The persisted `waiting` array is therefore already ordered by the selected policy's *next grant*. For example:
+`StrategyProvider` declares:
 
-- FIFO appends to the right, so the oldest request is granted first.
-- LIFO prepends to the left, so the most recently queued request is granted first.
+- `key`: stable identifier used in config entries and saved snapshots.
+- `label` and `description`: user-facing metadata.
+- `config_fields`: declarative field definitions owned by that strategy's `config.py`.
+- `create(config)`: constructs a new policy instance using validated settings.
 
-Already-active reservations are **never preempted**. A new policy can be added in a separate module, then registered in `STRATEGIES` in `strategies.py`, without changing the queue engine or Home Assistant action routing.
+`QueueStrategy` currently requires `enqueue(waiting, resource_id)`. This is sufficient for FIFO and non-preemptive LIFO. The engine consumes from the left of the pending deque and always enforces capacity.
 
-Priority-based FIFO will require a richer request model (priority metadata, stable FIFO ties, policy-specific snapshot migration and configuration). It is **not** implemented in this first v1 branch.
+`registry.py` explicitly registers provider instances. The Home Assistant strategy dropdown now reads its labels and values directly from the registry. This avoids adding hard-coded strategy names to `config_flow.py` every time another simple strategy is registered.
 
-### Adding a new strategy
+### Plugin-specific configuration and UI
 
-1. Implement a pure-Python class with a unique `key` and an `enqueue` method.
-2. Register an instance in `STRATEGIES`.
-3. Expose its name in the config-flow selector and translations.
-4. Add pure engine/coordinator tests, persistence/restart tests, and HA integration tests.
-5. Define what happens if a user switches strategy with active or waiting work. This first refactor prohibits switching until the queue is empty.
+The plugin's `config.py` declares `StrategyConfigField` descriptors. Both current strategies declare no additional fields. **The future strategy-specific options form and persistence of non-empty plugin settings are not implemented yet.** We should map those descriptors into native Home Assistant selectors in the host adapter instead of rendering custom HTML templates. For example, a priority strategy might later declare default priority, priority bounds, and aging behavior.
+
+The global Home Assistant action API is shared between strategies. Future strategy-specific request metadata (such as `priority`) needs an explicit extension to the request contract and its validation. It must not silently bypass the host's entity safety checks or change persisted ordering.
+
+### Adding an algorithm
+
+1. Create a package in `strategies/<key>/`.
+2. Add `strategy.py` with the pure scheduling logic and `config.py` with its optional settings.
+3. Add `provider.py` implementing `StrategyProvider` and creating an independent strategy instance.
+4. Register the provider in `strategies/registry.py`.
+5. Add policy, persistence/restart and Home Assistant integration tests.
+6. For strategies with extra settings or request payloads, extend the host's generic config/request adapter and migration format **before enabling the strategy**.
+
+Active reservations are never preempted. For current FIFO/LIFO policies the waiting deque stores requests in the order they will be granted. The v1 branch prohibits changing algorithms while active or waiting requests remain.
+
+**Priority-based FIFO is not yet implemented.** Its per-request priority metadata, stable ties, storage migration and UI deserve a separate design pass. The present provider contract establishes module boundaries without claiming that all future strategies can be installed with zero host changes.
 
 ## Actions and backward compatibility
 
