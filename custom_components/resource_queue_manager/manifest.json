@@ -1,6 +1,6 @@
 {
   "domain": "resource_queue_manager",
-  "name": "Resource Queue Manager (FIFO)",
+  "name": "Resource Queue Manager",
   "categories": [
     "helpers"
   ],
@@ -9,10 +9,9 @@
   ],
   "config_flow": true,
   "documentation": "https://github.com/HamzaKarfa/Resource-Queue-Manager",
-  "integration_type": "helper",
+  "integration_type": "service",
   "iot_class": "calculated",
   "issue_tracker": "https://github.com/HamzaKarfa/Resource-Queue-Manager/issues",
   "requirements": [],
-  "single_config_entry": true,
-  "version": "0.4.0"
+  "version": "1.0.0"
 }

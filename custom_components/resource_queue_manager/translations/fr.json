@@ -2,76 +2,137 @@
   "config": {
     "step": {
       "user": {
-        "title": "Configuration initiale",
-        "description": "Choisissez combien de ressources peuvent recevoir une réservation en même temps. Vous pourrez modifier cette limite et sélectionner les entités supervisées depuis « Configurer ».",
+        "title": "Créer un gestionnaire de ressources",
+        "description": "Créez une file indépendante. Choisissez une stratégie et les entités Home Assistant à superviser, y compris les helpers.",
         "data": {
-          "max_active": "Réservations simultanées"
+          "name": "Nom de la file",
+          "max_active": "Réservations simultanées",
+          "strategy": "Stratégie d'ordonnancement",
+          "monitored_entities": "Entités supervisées"
         },
         "data_description": {
-          "max_active": "Saisissez un nombre entier entre 1 et 50. Valeur conseillée pour commencer : 3."
+          "name": "Un nom permettant de distinguer cette file des autres, par exemple Chauffage.",
+          "max_active": "Nombre entier de 1 à 50. Valeur conseillée au départ : 3.",
+          "strategy": "FIFO : plus ancienne demande ; LIFO : plus récente ; FIFO prioritaire : priorité d'abord, puis ordre d'arrivée. Les réservations actives ne sont jamais interrompues.",
+          "monitored_entities": "Optionnel à la création. Une même entité ne peut appartenir qu'à une seule file."
+        }
+      },
+      "strategy": {
+        "title": "Configuration de la stratégie",
+        "description": "Définissez les paramètres propres à la stratégie sélectionnée.",
+        "data": {
+          "priority_order": "Ordre des priorités"
+        },
+        "data_description": {
+          "priority_order": "Plus forte d'abord : 10 avant 1. Plus faible d'abord : 1 avant 10. À priorité égale, ordre d'arrivée conservé."
         }
       }
+    },
+    "error": {
+      "invalid_name": "Saisissez un nom de file non vide.",
+      "name_in_use": "Ce nom est déjà utilisé par une autre file.",
+      "invalid_strategy": "Stratégie d'ordonnancement inconnue.",
+      "entities_in_use_elsewhere": "Au moins une entité sélectionnée est déjà supervisée par une autre file.",
+      "invalid_strategy_options": "Les paramètres de la stratégie sélectionnée sont invalides."
     }
   },
   "services": {
     "request": {
-      "name": "Demander une place",
-      "description": "Demande une place FIFO sans piloter l'entité.",
+      "name": "Demander une réservation",
+      "description": "Demande une place dans la file sans piloter physiquement l'entité.",
       "fields": {
         "resource_id": {
-          "name": "Identifiant de la ressource",
-          "description": "Identifiant stable d'une ressource, par exemple chambre_1."
+          "name": "Identifiant de ressource",
+          "description": "Identifiant logique stable, par exemple chambre_1."
         },
         "entity_id": {
           "name": "Entité supervisée",
-          "description": "Entité light ou switch supervisée qui doit être éteinte avant libération."
+          "description": "Entité Home Assistant associée. Les relais, lumières, ventilateurs et input_boolean doivent être à off avant libération ; les autres entités sont vérifiées uniquement pour leur disponibilité."
+        },
+        "config_entry_id": {
+          "name": "File de ressources",
+          "description": "Sélectionnez une file. Obligatoire dès que plusieurs files sont configurées."
+        },
+        "strategy_data": {
+          "name": "Données de la stratégie",
+          "description": "Pour FIFO prioritaire, indiquez strategy_data.priority (nombre entre 1 et 10). FIFO et LIFO n'utilisent aucun paramètre supplémentaire."
         }
       }
     },
     "release": {
-      "name": "Libérer une place",
-      "description": "Libère une réservation uniquement si HA signale le relais éteint.",
+      "name": "Libérer une réservation",
+      "description": "Libère une réservation après confirmation off pour les entités ON/OFF, ou après vérification de disponibilité pour les ressources logiques.",
       "fields": {
         "resource_id": {
-          "name": "Identifiant de la ressource",
-          "description": "Identifiant de ressource demandé précédemment."
+          "name": "Identifiant de ressource",
+          "description": "Identifiant d'une ressource précédemment demandée."
+        },
+        "config_entry_id": {
+          "name": "File de ressources",
+          "description": "Sélectionnez la file concernée. Obligatoire si plusieurs files existent."
         }
       }
     },
     "cancel": {
       "name": "Annuler une demande",
-      "description": "Annule une attente ou libère une réservation dont le relais est éteint.",
+      "description": "Retire une demande en attente ou libère une réservation selon le type d'entité supervisée.",
       "fields": {
         "resource_id": {
-          "name": "Identifiant de la ressource",
-          "description": "Identifiant de ressource demandé précédemment."
+          "name": "Identifiant de ressource",
+          "description": "Identifiant de la ressource à retirer."
+        },
+        "config_entry_id": {
+          "name": "File de ressources",
+          "description": "Sélectionnez la file concernée. Obligatoire si plusieurs files existent."
         }
       }
     },
     "resume": {
-      "name": "Reprendre la file après redémarrage",
-      "description": "Vérifie les entités supervisées et réactive les réservations FIFO. Contrôlez les équipements avant de reprendre."
+      "name": "Reprendre une file après redémarrage",
+      "description": "Vérifie les entités supervisées et reprend les allocations de cette file. Contrôlez les équipements avant de reprendre.",
+      "fields": {
+        "config_entry_id": {
+          "name": "File de ressources",
+          "description": "Sélectionnez la file concernée. Obligatoire si plusieurs files existent."
+        }
+      }
     }
   },
   "options": {
     "step": {
       "init": {
-        "title": "Gestion des ressources et capacité",
-        "description": "Choisissez les ressources autorisées à demander une place FIFO et définissez la capacité de la file.",
+        "title": "Ressources, capacité et stratégie",
+        "description": "Configurez les entités, la capacité et la stratégie de cette file. Il faut vider les demandes actives et en attente avant de changer de stratégie.",
         "data": {
           "monitored_entities": "Entités supervisées",
-          "max_active": "Réservations simultanées"
+          "max_active": "Réservations simultanées",
+          "strategy": "Stratégie d'ordonnancement"
         },
         "data_description": {
-          "max_active": "Nombre maximal de réservations actives à la fois (1 à 50). Les réservations existantes sont conservées.",
-          "monitored_entities": "Sélectionnez les interrupteurs et relais light/switch pilotés par vos automatisations. Les autres entités seront ignorées."
+          "max_active": "Nombre maximal de réservations actives (1 à 50). Les réservations existantes sont conservées.",
+          "monitored_entities": "Sélectionnez toute entité Home Assistant, dont input_boolean, input_number, input_text, number et text. Les valeurs non ON/OFF ne permettent pas de vérifier un arrêt physique.",
+          "strategy": "FIFO, LIFO ou FIFO prioritaire. La file doit être vide pour changer de stratégie ou de paramètres."
+        }
+      },
+      "strategy": {
+        "title": "Configuration de la stratégie",
+        "description": "Configurez les paramètres propres à la stratégie sélectionnée.",
+        "data": {
+          "priority_order": "Ordre des priorités"
+        },
+        "data_description": {
+          "priority_order": "Plus forte d'abord : 10 avant 1. Plus faible d'abord : 1 avant 10. À priorité égale, ordre d'arrivée conservé."
         }
       }
     },
     "error": {
       "storage_unavailable": "Impossible de lire les réservations sauvegardées. Configuration inchangée.",
-      "max_active_below_reserved": "Impossible de réduire la limite sous le nombre de réservations actuellement actives.",
-      "entities_in_use": "Impossible de désélectionner une entité avec une réservation active ou en attente."
+      "max_active_below_reserved": "Impossible de réduire la capacité sous le nombre de réservations actuellement actives.",
+      "entities_in_use": "Impossible de retirer une entité avec une réservation active ou en attente.",
+      "strategy_in_use": "Impossible de changer la stratégie ou ses paramètres tant qu'il reste des réservations actives ou en attente.",
+      "entities_in_use_elsewhere": "Au moins une entité sélectionnée appartient à une autre file.",
+      "invalid_strategy": "Stratégie d'ordonnancement inconnue.",
+      "invalid_strategy_options": "Les paramètres de la stratégie sélectionnée sont invalides."
     }
   }
 }

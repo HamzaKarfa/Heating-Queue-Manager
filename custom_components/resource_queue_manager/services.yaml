@@ -1,5 +1,10 @@
 request:
   fields:
+    config_entry_id:
+      required: false
+      selector:
+        config_entry:
+          integration: resource_queue_manager
     resource_id:
       required: true
       example: zone_1
@@ -9,13 +14,19 @@ request:
       required: true
       example: light.relais_chauffage_chambre_1
       selector:
-        entity:
-          domain:
-            - light
-            - switch
+        entity: {}
+    strategy_data:
+      required: false
+      selector:
+        object: {}
 
 release:
   fields:
+    config_entry_id:
+      required: false
+      selector:
+        config_entry:
+          integration: resource_queue_manager
     resource_id:
       required: true
       example: zone_1
@@ -24,10 +35,21 @@ release:
 
 cancel:
   fields:
+    config_entry_id:
+      required: false
+      selector:
+        config_entry:
+          integration: resource_queue_manager
     resource_id:
       required: true
       example: zone_1
       selector:
         text:
 
-resume: {}
+resume:
+  fields:
+    config_entry_id:
+      required: false
+      selector:
+        config_entry:
+          integration: resource_queue_manager

@@ -2,21 +2,44 @@
   "config": {
     "step": {
       "user": {
-        "title": "Initial configuration",
-        "description": "Choose how many resources may hold a reservation at the same time. You can adjust this limit and select supervised entities later under Configure.",
+        "title": "Create a resource queue",
+        "description": "Create an independent queue. Select a scheduling strategy and any Home Assistant entities to supervise, including helpers.",
         "data": {
-          "max_active": "Concurrent reservations"
+          "name": "Queue name",
+          "max_active": "Concurrent reservations",
+          "strategy": "Scheduling strategy",
+          "monitored_entities": "Supervised entities"
         },
         "data_description": {
-          "max_active": "Enter a whole number from 1 to 50. Suggested starting value: 3."
+          "name": "A name to distinguish this queue from other queues (for example Heating).",
+          "max_active": "Enter a whole number from 1 to 50. Suggested starting value: 3.",
+          "strategy": "FIFO grants by arrival order; LIFO grants the newest waiting request; Priority FIFO ranks waiting requests first. Active reservations are never interrupted.",
+          "monitored_entities": "Optional during setup. Devices must belong to only one resource queue."
+        }
+      },
+      "strategy": {
+        "title": "Strategy configuration",
+        "description": "Configure settings provided by the selected scheduling strategy.",
+        "data": {
+          "priority_order": "Priority order"
+        },
+        "data_description": {
+          "priority_order": "Highest first: 10 before 1. Lowest first: 1 before 10. Equal priorities retain arrival order."
         }
       }
+    },
+    "error": {
+      "invalid_name": "Enter a non-empty queue name.",
+      "name_in_use": "Another resource queue already uses this name.",
+      "invalid_strategy": "Unknown scheduling strategy.",
+      "entities_in_use_elsewhere": "A selected entity is already supervised by another resource queue.",
+      "invalid_strategy_options": "The selected strategy settings are invalid."
     }
   },
   "services": {
     "request": {
       "name": "Request slot",
-      "description": "Request a FIFO slot without actuating an entity.",
+      "description": "Request a resource queue slot without actuating an entity.",
       "fields": {
         "resource_id": {
           "name": "Resource ID",
@@ -24,54 +47,92 @@
         },
         "entity_id": {
           "name": "Supervised entity",
-          "description": "Supervised light or switch entity that must be OFF before release."
+          "description": "Associated Home Assistant entity. Lights, switches, fans and input_booleans must be OFF before release; other entities only require a verified available state."
+        },
+        "config_entry_id": {
+          "name": "Resource queue",
+          "description": "Target a particular queue. Optional only when exactly one queue is installed."
+        },
+        "strategy_data": {
+          "name": "Strategy request data",
+          "description": "Required for Priority FIFO: strategy_data.priority (a number from 1 to 10). FIFO and LIFO require no extra fields."
         }
       }
     },
     "release": {
       "name": "Release slot",
-      "description": "Release a reservation only if Home Assistant reports its entity OFF.",
+      "description": "Release an ON/OFF reservation only after OFF is confirmed; logical resources require a verified available state.",
       "fields": {
         "resource_id": {
           "name": "Resource ID",
           "description": "Previously requested resource ID."
+        },
+        "config_entry_id": {
+          "name": "Resource queue",
+          "description": "Target a particular queue. Optional only when exactly one queue is installed."
         }
       }
     },
     "cancel": {
       "name": "Cancel request",
-      "description": "Remove a waiting request or release an OFF reservation.",
+      "description": "Withdraw a waiting request or release an active reservation according to its entity supervision mode.",
       "fields": {
         "resource_id": {
           "name": "Resource ID",
           "description": "Previously requested resource ID."
+        },
+        "config_entry_id": {
+          "name": "Resource queue",
+          "description": "Target a particular queue. Optional only when exactly one queue is installed."
         }
       }
     },
     "resume": {
       "name": "Resume queue after restart",
-      "description": "Verify supervised entities and resume FIFO grants. Inspect equipment before recovery."
+      "description": "Verify supervised entities and resume grants. Inspect equipment before recovery.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Resource queue",
+          "description": "Target a particular queue. Optional only when exactly one queue is installed."
+        }
+      }
     }
   },
   "options": {
     "step": {
       "init": {
-        "title": "Resources and capacity",
-        "description": "Choose which resources can request a FIFO slot and set the queue capacity.",
+        "title": "Resources, capacity and scheduling",
+        "description": "Configure the scheduling strategy and the entities supervised by this queue. A strategy cannot change while work remains queued.",
         "data": {
           "monitored_entities": "Supervised entities",
-          "max_active": "Concurrent reservations"
+          "max_active": "Concurrent reservations",
+          "strategy": "Scheduling strategy"
         },
         "data_description": {
           "max_active": "Maximum active reservations at once (1–50). Existing reservations are preserved.",
-          "monitored_entities": "Select the light/switch entities controlled by your automations. Other entities will be ignored."
+          "monitored_entities": "Select any Home Assistant entity, including input_boolean, input_number, input_text, number and text. Generic entity values do not prove physical shutdown.",
+          "strategy": "FIFO grants by arrival order; LIFO grants the newest waiting request; Priority FIFO ranks waiting requests first. Active reservations are never interrupted."
+        }
+      },
+      "strategy": {
+        "title": "Strategy configuration",
+        "description": "Configure settings specific to the selected scheduling strategy.",
+        "data": {
+          "priority_order": "Priority order"
+        },
+        "data_description": {
+          "priority_order": "Highest first: 10 before 1. Lowest first: 1 before 10. Equal priorities retain arrival order."
         }
       }
     },
     "error": {
       "storage_unavailable": "Cannot read saved bookings. Configuration unchanged.",
       "max_active_below_reserved": "Cannot reduce the limit below the number of currently active reservations.",
-      "entities_in_use": "Cannot deselect an entity with an active or waiting reservation."
+      "entities_in_use": "Cannot deselect an entity with an active or waiting reservation.",
+      "strategy_in_use": "Cannot change scheduling strategy until active and waiting reservations have been cleared.",
+      "entities_in_use_elsewhere": "One or more selected entities belong to another resource queue.",
+      "invalid_strategy": "Unknown scheduling strategy.",
+      "invalid_strategy_options": "The selected strategy settings are invalid."
     }
   }
 }

@@ -1,11 +1,17 @@
-"""Pure-Python FIFO coordinator with conservative restart recovery.
+"""Pure-Python resource coordinator with conservative restart recovery.
 
 No Home Assistant imports and NO physical entity control. All operations are
 synchronous; the HA adapter serializes state mutations and disk writes.
 """
 
-from collections.abc import Callable, Iterable
-from .fifo import ResourceQueue, QueueResult
+from collections.abc import Callable, Iterable, Mapping
+from .engine import ResourceQueue, QueueResult
+from .strategies import DEFAULT_STRATEGY, validate_strategy_config
+from .entity_supervision import (
+    recovery_issue,
+    release_issue,
+    validate_entity_id,
+)
 
 
 class QueueStateError(ValueError):
@@ -24,8 +30,10 @@ class ResourceQueueCoordinator:
         max_active: int,
         entity_state: Callable[[str], str | None],
         monitored_entities: Iterable[str] = (),
+        strategy: str = DEFAULT_STRATEGY,
+        strategy_config: Mapping[str, object] | None = None,
     ) -> None:
-        self.queue = ResourceQueue(max_active)
+        self.queue = ResourceQueue(max_active, strategy, strategy_config)
         self._entity_state = entity_state
         self._entities: dict[str, str] = {}
         monitored = list(monitored_entities)
@@ -44,20 +52,36 @@ class ResourceQueueCoordinator:
         saved: object,
         monitored_entities: Iterable[str] = (),
         legacy_max_active: int | None = None,
+        strategy: str = DEFAULT_STRATEGY,
+        strategy_config: Mapping[str, object] | None = None,
     ) -> "ResourceQueueCoordinator":
-        """Restore FIFO order and entity registry; always start paused."""
+        """Restore saved request order and entity registry; always start paused."""
         if not isinstance(saved, dict):
             raise QueueStateError("Invalid stored coordinator state")
 
-        # The saved limit validates the ORIGINAL FIFO invariants. The new
+        # The saved limit validates the original reservation invariants. The new
         # configured limit can be larger without allocating extra slots yet.
         # Old 0.2 snapshots lacked max_active; use the initial entry limit.
         stored_limit = saved.get(
             "max_active",
             legacy_max_active if legacy_max_active is not None else max_active,
         )
+        saved_strategy = saved.get("strategy", DEFAULT_STRATEGY)
+        saved_config = saved.get("strategy_config", {})
+        configured = validate_strategy_config(strategy, strategy_config)
+        saved_active = saved.get("active")
+        saved_waiting = saved.get("waiting")
+        # Never silently reinterpret already queued requests under a new policy.
+        if (saved_strategy != strategy or saved_config != configured) and (
+            saved_active or saved_waiting
+        ):
+            raise QueueStateError(
+                "Cannot change strategy or settings while reservations or requests are pending"
+            )
         queue = ResourceQueue.from_snapshot(
-            stored_limit, saved.get("active"), saved.get("waiting")
+            stored_limit, saved_active, saved_waiting,
+            strategy=strategy, strategy_config=configured,
+            request_data=saved.get("request_data", {}),
         )
         if len(queue.snapshot().active) > max_active:
             raise QueueStateError(
@@ -80,7 +104,10 @@ class ResourceQueueCoordinator:
             ):
                 raise QueueStateError("Legacy entity registry disagrees with queue")
 
-        instance = cls(max_active, entity_state, monitored_entities)
+        instance = cls(
+            max_active, entity_state, monitored_entities,
+            strategy=strategy, strategy_config=configured,
+        )
         for resource, entity in bindings.items():
             instance._validate_resource_id(resource)
             instance._validate_entity_id(entity)
@@ -108,12 +135,19 @@ class ResourceQueueCoordinator:
             "active": list(snapshot.active),
             "waiting": list(snapshot.waiting),
             "max_active": self.max_active,
+            "strategy": self.strategy,
+            "strategy_config": dict(self.queue.strategy_config),
+            "request_data": self.queue.export_request_data(),
             "bindings": dict(self._entities),
         }
 
     def snapshot(self) -> QueueResult:
         """Return an immutable view of reservations."""
         return self.queue.snapshot()
+
+    @property
+    def strategy(self) -> str:
+        return self.queue.strategy
 
     @property
     def max_active(self) -> int:
@@ -139,11 +173,11 @@ class ResourceQueueCoordinator:
         }
         problems: list[str] = []
         for entity in sorted(self._monitored_entities):
-            state = self._entity_state(entity)
-            if state not in ("on", "off"):
-                problems.append(f"{entity}: state {state!r} is unverified")
-            elif state == "on" and entity not in active_entities:
-                problems.append(f"{entity}: ON without a reservation")
+            issue = recovery_issue(
+                entity, self._entity_state(entity), entity in active_entities
+            )
+            if issue:
+                problems.append(issue)
         return tuple(problems)
 
     def resume(self) -> QueueResult:
@@ -165,7 +199,10 @@ class ResourceQueueCoordinator:
                 "Queue is paused after startup; check entities and call resume"
             )
 
-    def request(self, resource_id: str, entity_id: str) -> QueueResult:
+    def request(
+        self, resource_id: str, entity_id: str,
+        request_data: Mapping[str, object] | None = None,
+    ) -> QueueResult:
         """Ask for a slot, without switching any real device."""
         self._require_ready()
         self._validate_resource_id(resource_id)
@@ -196,16 +233,16 @@ class ResourceQueueCoordinator:
             )
 
         state = self._entity_state(entity_id)
-        if state not in ("on", "off"):
-            raise QueueStateError(
-                f"Entity {entity_id!r} is not available (state={state!r})"
-            )
-        if state == "on" and resource_id not in self.queue.snapshot().active:
-            raise QueueStateError(
-                f"Entity {entity_id!r} is ON without a reservation"
-            )
+        issue = recovery_issue(
+            entity_id, state, resource_id in self.queue.snapshot().active
+        )
+        if issue:
+            raise QueueStateError(issue)
 
-        result = self.queue.request(resource_id)
+        try:
+            result = self.queue.request(resource_id, request_data)
+        except ValueError as err:
+            raise QueueStateError(str(err)) from err
         self._entities[resource_id] = entity_id
         return result
 
@@ -223,10 +260,10 @@ class ResourceQueueCoordinator:
         if resource_id in self.queue.snapshot().active:
             entity = self._entities[resource_id]
             state = self._entity_state(entity)
-            if state != "off":
+            issue = release_issue(entity, state)
+            if issue:
                 raise QueueStateError(
-                    f"Cannot release {resource_id!r}: entity {entity!r} "
-                    f"must be OFF (state={state!r})"
+                    f"Cannot release {resource_id!r}: {issue}"
                 )
         problems = self.recovery_issues()
         if problems:
@@ -248,12 +285,7 @@ class ResourceQueueCoordinator:
 
     @staticmethod
     def _validate_entity_id(entity_id: str) -> None:
-        if (
-            not isinstance(entity_id, str)
-            or entity_id.count(".") != 1
-            or entity_id.split(".", 1)[0] not in ("light", "switch")
-            or not entity_id.split(".", 1)[1]
-        ):
-            raise QueueStateError(
-                "entity_id must be a light.* or switch.* entity"
-            )
+        try:
+            validate_entity_id(entity_id)
+        except ValueError as err:
+            raise QueueStateError(str(err)) from err

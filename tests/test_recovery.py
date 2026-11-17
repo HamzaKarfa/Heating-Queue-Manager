@@ -43,6 +43,34 @@ class StartupRecoveryTests(unittest.TestCase):
         self.assertFalse(restored.paused)
         self.assertEqual(restored.release("h1").granted, ("h4",))
 
+    def test_populated_v04_snapshot_migrates_without_dropping_queue(self):
+        """A v0.4 snapshot has no strategy fields or per-request metadata."""
+        old_snapshot = {
+            "active": ["h1", "h2", "h3"],
+            "waiting": ["h4", "h5"],
+            "max_active": 3,
+            "bindings": {
+                f"h{i}": f"light.r{i}" for i in range(1, 6)
+            },
+        }
+        recovered = ResourceQueueCoordinator.from_state(
+            3, self.entities.get, old_snapshot,
+            monitored_entities=self.entities,
+            strategy="fifo",
+        )
+        self.assertTrue(recovered.paused)
+        self.assertEqual(recovered.snapshot().active, ("h1", "h2", "h3"))
+        self.assertEqual(recovered.snapshot().waiting, ("h4", "h5"))
+        self.assertEqual(recovered.queue.export_request_data(), {})
+        saved_again = recovered.export_state()
+        self.assertEqual(saved_again["strategy"], "fifo")
+        self.assertEqual(saved_again["request_data"], {})
+        self.assertEqual(saved_again["bindings"], old_snapshot["bindings"])
+        self.assertEqual(saved_again["active"], old_snapshot["active"])
+        self.assertEqual(saved_again["waiting"], old_snapshot["waiting"])
+        recovered.resume()
+        self.assertEqual(recovered.release("h1").granted, ("h4",))
+
     def test_on_reserved_relay_remains_reserved(self):
         self.manager.request("h1", "light.r1")
         self.entities["light.r1"] = "on"

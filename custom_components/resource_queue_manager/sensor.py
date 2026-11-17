@@ -1,4 +1,4 @@
-"""Read-only sensors exposing FIFO reservations and recovery readiness."""
+"""Read-only sensors exposing resource reservations and recovery readiness."""
 
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
@@ -26,7 +26,7 @@ async def async_setup_entry(
 
 
 class ResourceQueueSensor(SensorEntity):
-    """A FIFO counter or a readiness indicator with queue attributes."""
+    """A queue counter or a readiness indicator with reservation attributes."""
 
     _attr_should_poll = False
     _attr_icon = "mdi:playlist-check"
@@ -43,7 +43,12 @@ class ResourceQueueSensor(SensorEntity):
         self._manager = manager
         self._metric = metric
         self._attr_unique_id = f"{entry_id}_{metric}"
-        self._attr_name = f"Resource Queue {metric.capitalize()}"
+        # Preserve existing entity identifiers for the original v0.4 entry.
+        self._attr_name = (
+            f"Resource Queue {metric.capitalize()}"
+            if getattr(hass.config_entries.async_get_entry(entry_id), "title", "") == "Resource Queue Manager (FIFO)"
+            else f"{hass.config_entries.async_get_entry(entry_id).title} {metric.capitalize()}"
+        )
 
     @property
     def native_value(self) -> int | str:
@@ -62,12 +67,14 @@ class ResourceQueueSensor(SensorEntity):
 
     @property
     def extra_state_attributes(self) -> dict:
-        """Include current and pending FIFO order for dashboards."""
+        """Include current and pending request order for dashboards."""
         snapshot = self._manager.snapshot()
         return {
             "active": list(snapshot.active),
             "waiting": list(snapshot.waiting),
             "max_active": self._manager.max_active,
+            "strategy": self._manager.strategy,
+            "config_entry_id": self._entry_id,
             "paused": self._manager.paused,
             "monitored_entities": list(self._manager.monitored_entities),
             "recovery_issues": list(self._manager.recovery_issues()),

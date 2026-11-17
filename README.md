@@ -4,159 +4,203 @@
 [![Home Assistant tests](https://github.com/HamzaKarfa/Resource-Queue-Manager/actions/workflows/home-assistant-tests.yml/badge.svg)](https://github.com/HamzaKarfa/Resource-Queue-Manager/actions/workflows/home-assistant-tests.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-![Resource Queue Manager (FIFO) logo](assets/icon.png)
+![Resource Queue Manager logo](assets/icon.png)
 
+# Resource Queue Manager
 
-# Resource Queue Manager (FIFO)
+**Français :** [guide d'installation, configuration et migration](README.fr.md).
 
-[![Open Resource Queue Manager (FIFO) in Home Assistant Marketplace](https://my.home-assistant.io/badges/marketplace_repository.svg)](https://my.home-assistant.io/redirect/marketplace_repository/?owner=HamzaKarfa&repository=Resource-Queue-Manager&category=integration)
+**Resource Queue Manager** manages multiple independent resource queues in Home Assistant with **FIFO, LIFO and priority-based scheduling**, configurable capacity and persistent reservations. Each queue has its own supervised entities and state. It coordinates logical grants; your automations remain responsible for switching devices.
 
+> **Versioning:** Marketplace/HACS installs a published release, not an unreleased branch. Check the installed version before following the v1 instructions. When evaluating code ahead of a release, use a separate test instance and start with a noncritical entity.
 
-**Resource Queue Manager (FIFO)** is a Home Assistant custom integration that coordinates a configurable number of **simultaneous resource reservations** using a first-in, first-out (FIFO) queue.
+> **Important:** Resource Queue Manager never switches devices ON or OFF. Your automations do that after obtaining a grant. It is **not a certified electrical load-shedding, thermal safety or overcurrent protection device**. Manual commands, external automation and unsupervised equipment can bypass it.
 
-The FIFO engine is generic: a request is assigned a reservation immediately when capacity permits, or placed in a waiting queue. The current Home Assistant adapter supervises `light` and `switch` entities. **Your automations remain responsible for switching devices ON and OFF**; this integration only grants and tracks reservations.
+## What's new in v1
 
-> **Experimental software scheduler, not a safety-rated electrical load-shedding system.** Independent loads, external automations and manual switches can bypass its reservations. Keep electrical and thermal safety protections in place.
+- **Multiple named queues** in one integration: e.g. Heating (capacity 3), Ventilation (2), Irrigation (1).
+- **Independent strategies**, selected per queue during setup:
+  - **FIFO** — oldest waiting request first (default and v0.4-compatible).
+  - **LIFO** — newest waiting request first.
+  - **Priority FIFO** — priority ranking with FIFO order for equal priorities.
+- **Provider-based architecture**: each strategy ships its own `provider.py`, `config.py`, `request.py` and `strategy.py`. The core engine is not coupled to an algorithm.
+- **Strategy-specific settings and request data** validated by the chosen provider.
+- **Independent persistence and recovery**: every queue starts `paused` after reload and requires its own explicit `resume`.
+- **Unambiguous service routing** with `config_entry_id` when multiple entries exist.
+- Four read-only diagnostic sensors **per queue**, with strategy and entry ID in their attributes.
 
-## Features
+See [v1 architecture](docs/V1_ARCHITECTURE.md), [migration guide](docs/MIGRATION_v0.4_to_v1.md), [developer setup](docs/DEVELOPMENT.md), [changelog](CHANGELOG.md) and [v1 release notes](docs/releases/v1.0.0.md).
 
-- FIFO allocation with an adjustable concurrent reservation limit (1–50, initially 3).
-- A **Configure** menu to select the exact `light` and `switch` entities supervised by the queue.
-- A `resource_id` assigned to a monitored `entity_id` for each request.
-- Persistent active reservations, FIFO order and entity bindings in Home Assistant's `.storage`.
-- **Fail-closed recovery**: always reload in `paused` state; manual `resume` checks supervised entity states before granting reservations.
-- Explicit `off` confirmation before releasing an active reservation.
-- Four diagnostic sensors and a slot-granted event.
+For maintainers: [v1 release acceptance checklist](docs/RELEASE_CHECKLIST_v1.md) (manual test and publication gates).
 
-## How the FIFO queue works
+## Scheduling example
 
-Imagine four automations requesting access to **two slots** (the configured `max_active` is 2). Requests are processed in arrival order:
+Suppose a queue has **one** slot. Four requests arrive in this order: A, B, C, D. A is granted immediately and continues running; B/C/D are waiting.
 
-```text
-Request order:  kitchen → office → bedroom → hallway
+| Strategy | Waiting order after A is granted | Next grant after A is released |
+| --- | --- | --- |
+| FIFO | B → C → D | B |
+| LIFO | D → C → B | D |
+| Priority FIFO | Sorted by priority, then arrival order | Highest-ranked waiter |
 
-Active (2/2):  [kitchen] [office]
-Waiting (2):   bedroom → hallway
+For Priority FIFO, let B have priority 4, C have priority 8 and D have priority 4. With the default `highest_first` option, the waiting order is **C → B → D**. With `lowest_first`, it is **B → D → C**. Equal-priority requests remain FIFO.
 
-Once kitchen's device is confirmed OFF and its reservation is released:
+**All strategies are non-preemptive:** an already-active reservation is never revoked just because a more important request arrives. Priority FIFO can starve low-priority requests under sustained high-priority traffic; there is no aging or automatic priority escalation in v1.
 
-Active (2/2):  [office] [bedroom]
-Waiting (1):   hallway
-```
+## Installation
 
-The next waiting resource is granted automatically when a slot is released. Granting a slot **does not turn the device ON**.
+**Requirements:** Home Assistant **2026.11.0 or newer**. Any existing Home Assistant entity may be supervised, including native `number.*` / `text.*` entities and `input_number.*`, `input_text.*`, `input_boolean.*` helpers.
 
-### Reservation lifecycle
+### Stable installation from Marketplace
 
-1. **Request** — An automation calls `resource_queue_manager.request` for a supervised device.
-2. **Grant or wait** — If a slot is available, the reservation becomes **active**. Otherwise, the request enters the **FIFO waiting list**.
-3. **Switch ON** — Only after confirming that the reservation is active, **your automation** may switch the device ON.
-4. **Switch OFF** — Your automation turns the device OFF when it has finished.
-5. **Verify** — Home Assistant must report the device state as `off`. If it does not, **keep the reservation and investigate**.
-6. **Release** — Your automation calls `resource_queue_manager.release`. The **oldest waiting request** can then take the available slot.
+Go to **Settings → Marketplace**, search for *Resource Queue Manager*, install and restart Home Assistant. If the repository is not visible, use the Marketplace's **Add from link** feature with `https://github.com/HamzaKarfa/Resource-Queue-Manager`.
 
-**Request → Active or Waiting → Grant → Device ON → Device OFF → OFF confirmed → Release → Next request**
+Marketplace installs the latest published stable version. To inspect unreleased changes, follow the development instructions below and check the corresponding branch/version.
 
-The steps above use standard Markdown so the process stays readable in GitHub's mobile app, even when diagram rendering is unavailable.
+### Testing an unreleased development branch
 
-**Important:** all requests are blocked while the queue is `paused`. After every Home Assistant startup or integration reload, check the equipment and call `resource_queue_manager.resume` manually. Active reservations and waiting order persist across restarts, but grants do not resume on their own.
+Use a **separate Home Assistant test instance**, or make a full backup first and disable real-device automations. Files from a feature branch are not automatically part of the Marketplace release.
 
-## Installation and first setup
+1. Browse [the development branch](https://github.com/HamzaKarfa/Resource-Queue-Manager/tree/feat/v1-multi-queue-strategies/custom_components/resource_queue_manager) when it exists, or the branch under review.
+2. Copy the **whole** `custom_components/resource_queue_manager` directory from the selected branch into the test instance's `config/custom_components/resource_queue_manager`; do not mix component files from different versions.
+3. Restart Home Assistant, then go to **Settings → Devices & services → Add integration → Resource Queue Manager**.
+4. Add an entry and configure a **test lamp** or other low-risk entity. Repeat to test a second queue.
+5. Confirm the queue's `status` sensor reads `paused`; inspect supervised entity states and explicitly call `resume` for that entry.
+6. Exercise a request, an active grant, a waiting request, an OFF-verified release, a cancellation and a restart before using more complex automations.
 
-Requires **Home Assistant 2026.11 or later**.
+Avoid overwriting a working HACS-managed installation with a feature branch on a production system. Restore the stable version from a backup if you decide not to continue testing.
 
-1. Open **Settings → Marketplace** and find **Resource Queue Manager (FIFO)**. The integration has been accepted into the public catalog. If it is not yet visible in the search results, use **Add from link** with `https://github.com/HamzaKarfa/Resource-Queue-Manager`.
-2. Install the integration and restart Home Assistant.
-3. Go to **Settings → Devices & services → Add integration** and select **Resource Queue Manager (FIFO)**.
-4. Set the maximum concurrent reservations (`max_active`, from 1 to 50, initially 3).
-5. Open **Configure** on the integration and explicitly select the `light` and `switch` entities to supervise.
-6. Verify the physical devices and their states. Call the following action in **Developer tools → Actions**:
+### First configuration: one queue
+
+When adding **Resource Queue Manager**, enter a unique queue name (e.g. *Heating*), the number of simultaneous reservations (1–50), a strategy and any Home Assistant entities supervised by that queue. You can add more entries afterward using **Add integration** again.
+
+An entity may be supervised by **only one queue**, and each queue has its own capacity. There is **no shared electrical power limit** across queues.
+
+Choosing **Priority FIFO** displays an additional provider-specific setup step:
+
+| Setting | Values | Meaning |
+| --- | --- | --- |
+| `priority_order` | `highest_first` (default), `lowest_first` | Whether priority 10 or 1 wins first |
+
+Each Priority FIFO request must contain `strategy_data.priority`, a numeric value from **1 to 10**. FIFO and LIFO do not accept `priority` or any other provider-specific request fields.
+
+### Recovery: explicitly resume each queue
+
+All queues are restored in `paused` state after Home Assistant startup, integration reload or options changes. Inspect supervised entities before resuming. Binary ON/OFF entities must report `on` or `off`; an ON entity without an active reservation blocks recovery. Logical entities must report an available, known state. See **Supervision modes** below.
+
+In **Developer tools → Actions**, select `resource_queue_manager.resume` and specify the queue:
 
 ```yaml
 action: resource_queue_manager.resume
-data: {}
+data:
+  config_entry_id: "YOUR_CONFIG_ENTRY_ID"
 ```
 
-After configuration, check that `sensor.resource_queue_status` is `ready` before using automations.
+The `config_entry_id` is the Home Assistant **configuration entry ID**, not the queue name, entity ID or resource ID. The action editor offers a queue selector. The queue's status sensor must read `ready` before making requests.
 
-### Manual installation
+With **exactly one configured queue**, old v0.4 calls with no `config_entry_id` still work. As soon as two or more queues are configured, **every** `request`, `release`, `cancel` and `resume` action must select its entry, even if the other entry is currently unloaded.
 
-As an alternative to Marketplace, copy the repository's `custom_components/resource_queue_manager` folder into your Home Assistant `config/custom_components/` directory, restart Home Assistant, and follow steps 3–6 above.
+## Actions, events and safe reservation lifecycle
 
-Changing the integration options triggers a reload, which returns the queue to `paused`. You cannot remove supervision from an entity with a waiting or active reservation, or lower capacity below the current active count. Increasing capacity retains FIFO order; additional grants are considered after a successful `resume`.
+Home Assistant's **Developer tools → Actions** exposes the native `request`, `release`, `cancel` and `resume` actions (with localized labels). The screenshot below shows the actions as they appear in a French-language Home Assistant instance.
 
-## Actions and events
+![Resource Queue Manager actions in Home Assistant — request, release, cancel and resume](assets/resource-queue-manager-actions.webp)
 
-All actions use the `resource_queue_manager` domain. A `resource_id` is your unique logical reservation identifier (for example `office`); `entity_id` is the supervised Home Assistant device bound to it.
+**Quick UI smoke test on a noncritical device:** select `resource_queue_manager.resume` for the **test queue** after verifying supervised devices; call `request` using that queue's `config_entry_id`, a unique `resource_id` and a supervised test `entity_id`; confirm the corresponding `active` sensor increments; keep the test device OFF and call `release`; confirm the count returns to its previous value. Also test `cancel` on a waiting request. Never test first with a live heater or bypass physical protections.
 
-| Action | Required data | Behavior |
+| Action | Required data | Optional data | Purpose |
+| --- | --- | --- | --- |
+| `resource_queue_manager.request` | `resource_id`, `entity_id` | `config_entry_id`, `strategy_data` | Acquire capacity or join a waiting queue |
+| `resource_queue_manager.release` | `resource_id` | `config_entry_id` | Confirm OFF for ON/OFF entities; require a known state for logical entities |
+| `resource_queue_manager.cancel` | `resource_id` | `config_entry_id` | Withdraw a waiting request or safely release an active reservation |
+| `resource_queue_manager.resume` | — | `config_entry_id` | Validate supervised states and resume after reload |
+
+Note that `config_entry_id` is effectively **required for all four actions when multiple queues exist**.
+
+**Physical ON/OFF lifecycle:** Request → reservation becomes active or waits → automation confirms grant → automation switches device ON → automation switches device OFF → Home Assistant reports `off` → automation releases reservation → next waiting request is granted. Logical resources use the same booking lifecycle but do not use an OFF signal.
+
+The integration fires `resource_queue_manager_slot_granted` with `resource_id`, `entity_id` and `config_entry_id` after persisting newly granted slots. Events are not replayed for existing grants. Use the relevant queue sensor's `active` attribute to verify a grant even if an event was missed.
+
+### Supervision modes: physical vs. logical resources
+
+The entity selector is **domain-neutral**. Every queue still requires an actual entity to exist and be explicitly selected as supervised. The service `entity_id` is **required** for each `request`.
+
+| Entity domains | Supervision rule | Active reservation release |
 | --- | --- | --- |
-| `resource_queue_manager.request` | `resource_id`, `entity_id` | Reserve a free slot or join the FIFO waiting list; never switches a device |
-| `resource_queue_manager.release` | `resource_id` | Release an active reservation only after Home Assistant confirms its entity is `off`; also withdraws a waiting request |
-| `resource_queue_manager.cancel` | `resource_id` | Withdraw a waiting request or release a reservation whose entity is `off` |
-| `resource_queue_manager.resume` | None | Check all supervised entity states and allow grants after startup/reload |
+| `light`, `switch`, `fan`, `input_boolean` | Reject unavailable, unknown and any non-ON/OFF state; reject ON without a booking | Requires observed `off` |
+| `number`, `text`, `input_number`, `input_text`, `input_select`, `sensor`, other domains | Require an existing, known state (not `unknown`/`unavailable`) | Known state is enough; no OFF check |
 
-Request a slot:
+**Safety boundary:** a generic entity's state does **not** confirm that a physical actuator has stopped. Use a supervised ON/OFF entity, or independent hardware safety, for physical electrical loads. Merely supervising a number or text helper must never be used as proof of power isolation.
+
+### FIFO or LIFO request
 
 ```yaml
 action: resource_queue_manager.request
 data:
-  resource_id: office
+  config_entry_id: "YOUR_CONFIG_ENTRY_ID"
+  resource_id: demo_lamp
   entity_id: light.demo_lamp
 ```
 
-After the entity has been switched OFF **and** its state is confirmed `off`, release the slot:
+### Priority FIFO request
+
+```yaml
+action: resource_queue_manager.request
+data:
+  config_entry_id: "YOUR_PRIORITY_QUEUE_ENTRY_ID"
+  resource_id: bedroom
+  entity_id: switch.bedroom_test_relay
+  strategy_data:
+    priority: 8
+```
+
+Priority must be supplied on **every new** Priority FIFO request. The same `resource_id` cannot change its entity binding or request priority while active/waiting; cancel or safely release it first. Unknown provider fields and out-of-range values are rejected.
+
+### Release or cancel
+
+For an ON/OFF entity (light, switch, fan or input_boolean), **wait until Home Assistant reports `off`** before releasing. For a generic number/text/sensor entity, a valid available state is sufficient to release the logical booking; this is **not** evidence that a physical device is safe to switch:
 
 ```yaml
 action: resource_queue_manager.release
 data:
-  resource_id: office
+  config_entry_id: "YOUR_CONFIG_ENTRY_ID"
+  resource_id: bedroom
 ```
 
-If the request is still waiting, cancel it with `resource_queue_manager.cancel` using the same `resource_id`. An active reservation cannot be cancelled while its entity reports `on`.
+Use `resource_queue_manager.cancel` with the same entry ID and resource ID to withdraw a waiting request. Cancellation of an active ON/OFF reservation also requires its entity to report OFF; generic entities require an available state.
 
-When a reservation is newly granted, the integration fires `resource_queue_manager_slot_granted` with `resource_id`, `entity_id` and `config_entry_id`. The `active` attribute on the diagnostic sensor is the authoritative list: a grant event may be missed if an automation was not listening yet, and an existing grant is not re-emitted just because the action was called again.
+### Low-risk test automation
 
-## Complete Home Assistant automation example
-
-The example below is for a **low-risk test lamp**, not for direct production control of a heater or another safety-critical load. It waits for an actual reservation before switching the device ON, then switches it OFF and releases the slot.
-
-**Prepare the test:** create an `input_button.fifo_demo` helper under **Settings → Devices & services → Helpers**. Replace `light.demo_lamp` with a real test light, add that exact entity in the integration's **Configure** menu, and check the real ID of `sensor.resource_queue_active` (Home Assistant may assign a different one). Ensure the light starts OFF and the queue is `ready`.
-
-Paste this automation in Home Assistant's YAML editor:
+Create an `input_button.queue_demo` helper; supervise a real **test light** `light.demo_lamp` in your new queue. Find its actual **active sensor entity ID** under Devices & services → Entities (for example `sensor.heating_test_active`) and replace the placeholders below. Do not use this example on an unattended heater.
 
 ```yaml
-alias: "Resource Queue - test lamp"
-description: "Reserve one FIFO slot before switching a low-risk test light."
+alias: "Resource Queue v1 - test lamp"
 mode: single
 triggers:
   - trigger: state
-    entity_id: input_button.fifo_demo
-conditions: []
+    entity_id: input_button.queue_demo
 actions:
   - action: resource_queue_manager.request
     data:
+      config_entry_id: "YOUR_CONFIG_ENTRY_ID"
       resource_id: demo_lamp
       entity_id: light.demo_lamp
-
-  # A grant might already have happened during the request action.
-  # Check the persisted sensor state, rather than only listening for an event.
+      # For Priority FIFO only, add:
+      # strategy_data:
+      #   priority: 5
   - wait_template: >
-      {{ 'demo_lamp' in
-         (state_attr('sensor.resource_queue_active', 'active') or []) }}
+      {{ 'demo_lamp' in (state_attr('sensor.YOUR_QUEUE_active', 'active') or []) }}
     timeout: "00:02:00"
     continue_on_timeout: true
-
   - if:
       - condition: template
         value_template: "{{ not wait.completed }}"
     then:
-      # Cancel the pending reservation if no slot arrives in time.
       - action: resource_queue_manager.cancel
         data:
+          config_entry_id: "YOUR_CONFIG_ENTRY_ID"
           resource_id: demo_lamp
-      - stop: "No FIFO reservation became available."
-
+      - stop: "Timed out waiting for reservation"
   - action: light.turn_on
     target:
       entity_id: light.demo_lamp
@@ -164,64 +208,55 @@ actions:
   - action: light.turn_off
     target:
       entity_id: light.demo_lamp
-
-  # Never release while the device might still be ON.
   - wait_template: "{{ is_state('light.demo_lamp', 'off') }}"
     timeout: "00:00:30"
     continue_on_timeout: false
   - action: resource_queue_manager.release
     data:
+      config_entry_id: "YOUR_CONFIG_ENTRY_ID"
       resource_id: demo_lamp
 ```
 
-Press the `fifo_demo` input button to run the test. With a free slot, the light should turn ON for 15 seconds and then turn OFF. When all slots are occupied, this automation waits in FIFO order, or cancels its waiting request after two minutes.
+A stopped automation, lost connection or HA restart can leave a reservation active. This example is **not fault tolerant**; reconcile the actual device states and saved reservations before issuing `resume` or re-running a resource.
 
-**This is a demonstration, not fault-tolerant load control.** If Home Assistant restarts, an action fails, or the automation is interrupted, the remaining reservation is not automatically cleaned up. Do not rely on this example for thermal or electrical safety. Check device states and the queue before calling `resume` or attempting a new run. Adapt device switching and recovery to your own automations.
+## Diagnostics and troubleshooting
 
-## Diagnostic sensors
+Each entry owns four sensors. Newly added queues use their entry title in their sensor names. The **legacy v0.4 entry preserves** its existing Resource Queue sensor names and unique IDs. Check the actual entity IDs in Home Assistant; do not assume a name is fixed.
 
-| Default entity | State | Useful attributes |
+| Sensor (typical suffix) | State | Attributes |
 | --- | --- | --- |
-| `sensor.resource_queue_active` | Number of active reservations | `active`: ordered list of resource IDs |
-| `sensor.resource_queue_waiting` | Number of pending requests | `waiting`: FIFO order |
-| `sensor.resource_queue_available` | Free grantable slots; **0 while paused** | `max_active` |
-| `sensor.resource_queue_status` | `paused` or `ready` | `recovery_issues`, `monitored_entities` |
+| `*_active` | Active reservation count | `active` (resource IDs) |
+| `*_waiting` | Waiting request count | `waiting` (next-grant order) |
+| `*_available` | Grantable slots; 0 if paused | `max_active` |
+| `*_status` | `paused` or `ready` | `recovery_issues`, `monitored_entities` |
 
-Each sensor exposes queue context, including `active`, `waiting`, `paused`, `monitored_entities`, `max_active` and `recovery_issues`. If Home Assistant has an existing conflicting entity name, the actual entity ID may differ. Check the **Entities** tab rather than assuming the example name is exact.
+All sensors also expose `strategy`, `config_entry_id`, active/waiting IDs and safety state. Priority values are persisted internally as request metadata; the basic sensor lists remain **ID-only**.
 
-## Troubleshooting
-
-| Symptom | What to check |
+| Symptom | Check |
 | --- | --- |
-| Queue stays `paused` after restart or after changing options | This is intentional. Check supervised devices and use `resource_queue_manager.resume` manually. |
-| `resume` reports "Recovery blocked" | Inspect the `recovery_issues` attribute. Supervised entities must report `on` or `off`; an entity that is ON must already have an active reservation. Resolve unknown/unavailable or unreserved ON states before retrying. |
-| Request says "not supervised" | Add the exact `light.*` or `switch.*` entity in the integration's **Configure** menu, then verify states and call `resume`. |
-| Request waits forever | Check `sensor.resource_queue_waiting`, capacity and whether existing active reservations have been released. Automations must wait for a grant, not just for `request` to return. |
-| Release or cancel fails | An active resource's bound entity must **report** `off`, not merely have received a turn-off command. Verify the real state and retry. |
-| Automation misses `resource_queue_manager_slot_granted` | Consult the `active` sensor attribute; the event fires for new grants but is not a durable subscription or replay mechanism. |
-| Request pauses the queue unexpectedly | A monitored entity may be `unknown`, `unavailable`, missing, or ON without an active reservation. Inspect `recovery_issues` and resolve the mismatch. |
-| Configuration cannot be changed | Active/waiting entity bindings cannot be removed; capacity cannot be set below the active reservation count. Finish or safely cancel reservations first. |
-| Home Assistant restarted during an automation | The queue restores saved reservations in `paused`. Inspect equipment and active/waiting lists; reconcile interrupted automations **before** manually resuming. |
+| Action says `specify config_entry_id` | Two or more queues are configured; select the owning entry in **all** actions. |
+| Queue is paused after restart or options change | Expected. Inspect supervised entities, then call `resume` on that queue. |
+| `resume` refuses to run | Inspect the queue's `recovery_issues` attribute; fix missing/unavailable entities, or ON/OFF entities powered ON without a booking. |
+| `request` rejects `priority` | Priority goes inside `strategy_data` and is only supported by **Priority FIFO**. |
+| Priority request fails for missing metadata | Provide `strategy_data: {priority: 1}` through `{priority: 10}` (inclusive). |
+| Two queues cannot monitor the same entity | This is intentional. Assign each supervised entity to one queue only. |
+| Queue is not granting | Confirm its `status` is `ready`, its capacity and the supervised entity states. |
+| A lower-priority request never runs | Priority FIFO is non-preemptive and does not have aging; frequent high-priority arrivals may cause starvation. |
+| Changing strategy or configuration is refused | Empty the active and waiting lists safely before switching policies or provider-specific settings. |
+| Release/cancel fails | ON/OFF entities must **report** `off`; generic logical entities must be available (not `unknown`/`unavailable`). |
+| A grant event was missed | Read that specific queue's `active` sensor attribute. |
 
-**Safety limit:** `max_active` caps the number of **logical reservations**, not measured electrical current or the number of devices actually ON. An unsupervised relay, manual command, or other automation can bypass the reservation system. Always retain independent electrical, thermal, and equipment protections.
+**Safety reminder:** reservation capacity does not measure electrical current or force devices OFF. Keep independent protection devices, thermal limits, and normal circuit protection.
 
-## BREAKING CHANGE — replacing Heating Queue Manager
+## Upgrading from v0.4
 
-This project intentionally uses a **new integration domain** and does **not** migrate the old config entry or persisted queue data. If you remove the old integration and reinstall:
+The existing `resource_queue_manager` domain, config-entry ID, storage key, legacy FIFO ordering and old action names are retained. **There is no automatic strategy migration**: old entries default to FIFO. The v1 snapshot adds optional `strategy`, `strategy_config` and `request_data` fields. Old snapshots without these fields continue to load as FIFO.
 
-1. **Disable all automations calling `heating_queue_manager.*` first**, especially heater automations, and ensure relays are OFF before proceeding.
-2. Delete the old integration under Home Assistant → Devices & services and remove the old custom component directory `custom_components/heating_queue_manager` (and its HACS entry if applicable).
-3. Install the renamed `custom_components/resource_queue_manager`, restart Home Assistant, add and configure it with only the devices you intend to supervise. Check the actual relay states, then call `resource_queue_manager.resume`.
-4. Update **all** old calls: `heating_queue_manager.request` → `resource_queue_manager.request`; `heating_queue_manager.release` → `resource_queue_manager.release`; similarly for `cancel` and `resume`.
-5. Update fields `heater_id` → `resource_id` and `relay_entity_id` → `entity_id` in requests. Keep the `resource_id` value, such as `chambre_1`, unchanged if desired.
-6. Update sensor references, e.g. `sensor.heating_queue_status` → `sensor.resource_queue_status`, and the `active`, `waiting`, and `available` sensors. The new event is `resource_queue_manager_slot_granted`.
-7. Validate a complete grant/ON/OFF/release/idle-cancel cycle on **one low-risk test device** before enabling real heater automations.
+Before adding a second entry, update existing automations to pass the legacy queue's **actual `config_entry_id`** on all four actions. Back up Home Assistant and disable real-equipment automations while testing. After the upgrade, verify the saved active/waiting lists and supervised entity states, then explicitly `resume` the original queue.
 
-**Existing heating schedules and thermostat logic remain in your own Home Assistant automations.** This integration does not migrate, create or modify those automations.
+Read the [detailed v0.4 → v1 migration procedure](docs/MIGRATION_v0.4_to_v1.md). Migration from the **older `heating_queue_manager` integration** is separate: it used a different domain and is not automatic.
 
-This version still requires a binary `light` or `switch` state; arbitrary sensors or other device domains cannot yet be reserved directly. The number of FIFO slots does **not** limit real-world loads outside the supervised list.
-
-## Tests
+## Development, compatibility and release
 
 ```bash
 python -m unittest discover -s tests -v
@@ -229,18 +264,8 @@ python -m pip install "pytest-homeassistant==2026.11.1"
 python -m pytest -q tests/ha/test_integration.py
 ```
 
-CI exercises both isolated Python code and Home Assistant 2026.11 config entries and services. Tests use simulated states, not physical loads.
+CI also validates HACS/Marketplace metadata and Home Assistant hassfest. Tests simulate Home Assistant states, **not physical devices**. See [DEVELOPMENT.md](docs/DEVELOPMENT.md) for environment setup and plugin development.
 
-## Marketplace and validation
+This branch stages manifest version **1.0.0** for review. The version in `manifest.json` is the component version; the GitHub Release tag will be `v1.0.0` when explicitly published after merging. **No merge, tag or public release is performed by pushing these preparation commits.**
 
-Resource Queue Manager (FIFO) has been accepted into the [Home Assistant Marketplace catalog](https://github.com/hacs/default). If it is not yet visible in Marketplace search, install it using **Add from link** as described above.
-
-The repository runs [Marketplace/HACS validation](https://github.com/HamzaKarfa/Resource-Queue-Manager/actions/workflows/validate.yml) (including hassfest) and [Home Assistant integration tests](https://github.com/HamzaKarfa/Resource-Queue-Manager/actions/workflows/home-assistant-tests.yml). Tests use simulated states; they do not replace testing your own automations and independent equipment safety protections.
-
-## Versioning
-
-The integration's `manifest.json` version is the installed component version. The published GitHub release tag should use the same semantic version prefixed by `v`, for example `v0.4.0`. Published releases, not lightweight tags alone, provide stable update targets to Marketplace users. No automatic release is generated merely by merging this repository's workflow changes.
-
-## License
-
-This project is distributed under the [MIT License](LICENSE).
+The repository is distributed under the [MIT License](LICENSE).
