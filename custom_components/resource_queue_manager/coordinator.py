@@ -76,6 +76,7 @@ class ResourceQueueCoordinator:
         queue = ResourceQueue.from_snapshot(
             stored_limit, saved_active, saved_waiting,
             strategy=strategy, strategy_config=configured,
+            request_data=saved.get("request_data", {}),
         )
         if len(queue.snapshot().active) > max_active:
             raise QueueStateError(
@@ -131,6 +132,7 @@ class ResourceQueueCoordinator:
             "max_active": self.max_active,
             "strategy": self.strategy,
             "strategy_config": dict(self.queue.strategy_config),
+            "request_data": self.queue.export_request_data(),
             "bindings": dict(self._entities),
         }
 
@@ -192,7 +194,10 @@ class ResourceQueueCoordinator:
                 "Queue is paused after startup; check entities and call resume"
             )
 
-    def request(self, resource_id: str, entity_id: str) -> QueueResult:
+    def request(
+        self, resource_id: str, entity_id: str,
+        request_data: Mapping[str, object] | None = None,
+    ) -> QueueResult:
         """Ask for a slot, without switching any real device."""
         self._require_ready()
         self._validate_resource_id(resource_id)
@@ -232,7 +237,10 @@ class ResourceQueueCoordinator:
                 f"Entity {entity_id!r} is ON without a reservation"
             )
 
-        result = self.queue.request(resource_id)
+        try:
+            result = self.queue.request(resource_id, request_data)
+        except ValueError as err:
+            raise QueueStateError(str(err)) from err
         self._entities[resource_id] = entity_id
         return result
 
