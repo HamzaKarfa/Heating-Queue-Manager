@@ -71,6 +71,48 @@ class CoordinatorTests(unittest.TestCase):
         self.assertEqual(recovered.strategy, "fifo")
         self.assertEqual(recovered.snapshot().active, ("h1", "h2"))
 
+    def test_provider_settings_change_is_blocked_with_active_work(self):
+        from resource_queue_manager.strategies import (
+            PROVIDERS, FifoStrategy, StrategyConfigField
+        )
+
+        class ConfiguredProvider:
+            key = "settings_test"
+            label = "Settings test"
+            description = "Test-only options"
+            config_fields = (
+                StrategyConfigField(
+                    key="value", label="Value", kind="number",
+                    required=True, minimum=1, maximum=10
+                ),
+            )
+
+            def create(self, config=None):
+                return FifoStrategy()
+
+        PROVIDERS["settings_test"] = ConfiguredProvider()
+        try:
+            queue = ResourceQueueCoordinator(
+                1, self.entities.get, self.entities,
+                strategy="settings_test", strategy_config={"value": 1}
+            )
+            queue.request("unit_1", "light.relay_1")
+            saved = queue.export_state()
+            self.assertEqual(saved["strategy_config"], {"value": 1})
+            with self.assertRaises(QueueStateError):
+                ResourceQueueCoordinator.from_state(
+                    1, self.entities.get, saved, self.entities,
+                    strategy="settings_test", strategy_config={"value": 2}
+                )
+            recovered = ResourceQueueCoordinator.from_state(
+                1, self.entities.get, saved, self.entities,
+                strategy="settings_test", strategy_config={"value": 1}
+            )
+            self.assertTrue(recovered.paused)
+            self.assertEqual(recovered.snapshot().active, ("unit_1",))
+        finally:
+            del PROVIDERS["settings_test"]
+
     def test_strategy_switch_only_with_empty_queue(self):
         self.request(1)
         saved = self.manager.export_state()
