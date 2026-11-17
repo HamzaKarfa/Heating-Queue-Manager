@@ -1,3 +1,9 @@
+[![Home Assistant](https://img.shields.io/badge/Home%20Assistant-Custom%20Integration-41BDF5?logo=homeassistant&logoColor=white)](https://www.home-assistant.io/)
+[![HACS](https://img.shields.io/badge/HACS-Custom%20Repository-41BDF5)](https://hacs.xyz/)
+[![HACS validation](https://github.com/aalexcoding/haier-smartair2-cloud-for-homeassistant-leroy-machine/actions/workflows/hacs.yaml/badge.svg)](https://github.com/aalexcoding/haier-smartair2-cloud-for-homeassistant-leroy-machine/actions/workflows/hacs.yaml)
+[![hassfest](https://github.com/aalexcoding/haier-smartair2-cloud-for-homeassistant-leroy-machine/actions/workflows/hassfest.yaml/badge.svg)](https://github.com/aalexcoding/haier-smartair2-cloud-for-homeassistant-leroy-machine/actions/workflows/hassfest.yaml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 ![Resource Queue Manager (FIFO) logo](assets/icon.png)
 
 
