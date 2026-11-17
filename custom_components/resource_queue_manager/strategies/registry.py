@@ -5,6 +5,7 @@ from collections.abc import Mapping
 from .base import QueueStrategy, StrategyConfigField, StrategyProvider
 from .fifo.provider import FifoProvider
 from .lifo.provider import LifoProvider
+from .priority_fifo.provider import PriorityFifoProvider
 
 DEFAULT_STRATEGY = "fifo"
 
@@ -13,6 +14,7 @@ DEFAULT_STRATEGY = "fifo"
 PROVIDERS: dict[str, StrategyProvider] = {
     "fifo": FifoProvider(),
     "lifo": LifoProvider(),
+    "priority_fifo": PriorityFifoProvider(),
 }
 STRATEGIES = PROVIDERS  # Legacy config-flow membership alias.
 
