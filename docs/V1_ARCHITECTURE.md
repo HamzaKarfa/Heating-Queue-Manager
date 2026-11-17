@@ -7,7 +7,7 @@ This document describes the **work-in-progress v1 refactor**. The published v0.4
 One Home Assistant integration can manage multiple independent configuration entries. Each entry owns:
 
 - A user-defined name (Home Assistant entry title).
-- A selected scheduling policy, initially `fifo` or `lifo`.
+- A selected scheduling policy: `fifo`, `lifo` or `priority_fifo`.
 - A maximum concurrent reservation count (1–50).
 - Its own supervised `light`/`switch` entities and four diagnostic sensors.
 - An independent `.storage/resource_queue_manager.<config_entry_id>` snapshot, runtime lock, pause/recovery state and queue ordering.
@@ -40,11 +40,18 @@ custom_components/resource_queue_manager/
     │   ├── config.py          # Strategy-specific configuration fields
     │   ├── request.py         # Per-request field declarations
     │   └── strategy.py        # FIFO algorithm
-    └── lifo/
+    ├── lifo/
+    │   ├── __init__.py
+    │   ├── provider.py        # LifoProvider
+    │   ├── config.py          # Strategy-specific configuration fields
+    │   ├── request.py         # Per-request fields
+    │   └── strategy.py        # LIFO algorithm
+    └── priority_fifo/
         ├── __init__.py
-        ├── provider.py        # LifoProvider
-        ├── config.py          # Strategy-specific configuration fields
-        └── strategy.py        # LIFO algorithm
+        ├── provider.py        # PriorityFifoProvider
+        ├── config.py          # High-first / low-first setting
+        ├── request.py         # Required priority (1–10)
+        └── strategy.py        # Priority ordering with FIFO ties
 ```
 
 The dependency direction is **Home Assistant adapter → coordinator → engine → provider-created strategy**. The strategy packages themselves contain no Home Assistant imports. Every queue receives its **own instance** of the selected policy.
@@ -69,25 +76,24 @@ The plugin's `config.py` declares `StrategyConfigField` descriptors; these can i
 
 If a registered provider declares settings, setup and Options now present an additional **Strategy configuration** step. The host validates the submitted values with `validate_strategy_config()`, persists them under `strategy_config` in the entry and saved queue snapshot, and passes them into a new isolated policy instance on each setup/reload. Switching a strategy or its settings with active/waiting reservations is rejected.
 
-For example, a future plugin could declare:
+The built-in Priority FIFO plugin declares its own queue setting:
 
 ```python
 CONFIG_FIELDS = (
     StrategyConfigField(
-        key="default_priority",
-        label="Default priority",
-        kind="number",
-        required=True,
-        default=3,
-        minimum=1,
-        maximum=10,
+        key="priority_order", label="Priority order",
+        kind="select", required=True, default="highest_first",
+        choices=("highest_first", "lowest_first"),
     ),
 )
 ```
 
+Its `request.py` declares a required numeric `priority` from 1 through 10.
+Plain FIFO and LIFO do not accept any strategy-specific request data.
+
 Those fields would automatically appear in the host's additional strategy form. Each new plugin still needs appropriate English translation keys for its fields. Per-request fields are now declared separately through a plugin's `request.py` and `request_fields` provider attribute. The common Home Assistant `request` action exposes an **optional `strategy_data` object** whose keys are checked strictly against that selected provider's request schema. The engine receives a `QueueRequest(resource_id, data)` and persists non-empty data in a new `request_data` mapping alongside the existing ID-only `active`/`waiting` lists. Older snapshots missing `request_data` restore normally for FIFO/LIFO.
 
-For a future priority plugin, a request could look like:
+For a **Priority FIFO** queue, a supported request looks like:
 
 ```yaml
 action: resource_queue_manager.request
@@ -99,7 +105,19 @@ data:
     priority: 7
 ```
 
-**This is a future-plugin example, not a currently supported FIFO/LIFO payload.** Both shipped policies intentionally reject unknown request metadata. No priority strategy is registered in this branch. A test-only strategy validates that priorities can reorder pending resources and survive a restart without changing the core engine. The host retains full control over state checks and does not actuate physical devices.
+The example is implemented in the **v1 development branch**, not the stable
+v0.4 release. The priority is required, and an existing waiting request cannot
+change its priority silently.
+
+**Behavior:** in `highest_first` mode, 10 is scheduled before 7, while
+`lowest_first` schedules 1 before 7. Equal priorities keep their original
+arrival order (FIFO). A newly arrived high-priority request **never preempts**
+an already active reservation. Sustained higher-priority traffic can starve
+lower-priority requests; aging/fairness controls are not yet implemented.
+
+Request data is validated and persists across restart without changing
+the ID-only `active` and `waiting` sensor attributes. The host retains its
+safety checks and never directly switches a physical entity.
 
 For richer per-request fields, adding Home Assistant labels to `services.yaml` remains a documentation/UI task; the stable extensibility interface is the validated `strategy_data` object. Provider-supplied code or services are **not automatically executed**.
 
@@ -114,7 +132,10 @@ For richer per-request fields, adding Home Assistant labels to `services.yaml` r
 
 Active reservations are never preempted. For current FIFO/LIFO policies the waiting deque stores requests in the order they will be granted. The v1 branch prohibits changing algorithms while active or waiting requests remain.
 
-**Priority-based FIFO is not yet implemented.** Its per-request priority metadata, stable ties, storage migration and UI deserve a separate design pass. The present provider contract establishes module boundaries without claiming that all future strategies can be installed with zero host changes.
+**Priority FIFO is implemented as a plugin without changing the queue
+engine or coordinator.** The extensible request contract and forms were added
+earlier in this PR. More complex policies (aging, preemption, dynamic priority
+changes) would still need explicit additional host contracts and tests.
 
 ## Actions and backward compatibility
 
@@ -150,7 +171,7 @@ The grant event retains `config_entry_id` for consumers to distinguish queues. T
 
 Before bumping `manifest.json` to `1.0.0` and publishing:
 
-- [ ] Pure-Python engine and coordinator tests pass (FIFO, LIFO, recovery, invalid policy).
+- [ ] Pure-Python engine and coordinator tests pass (FIFO, LIFO, Priority FIFO, recovery, invalid policy).
 - [ ] Home Assistant 2026.11 integration tests pass with two independent config entries.
 - [ ] HACS/Marketplace validation and hassfest pass.
 - [ ] Manual setup, rename, options, entry removal and service-selector checks.
