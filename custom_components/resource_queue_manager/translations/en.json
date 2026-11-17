@@ -16,13 +16,20 @@
           "strategy": "FIFO grants the oldest request; LIFO grants the most recently queued request. Active reservations are never interrupted.",
           "monitored_entities": "Optional during setup. Devices must belong to only one resource queue."
         }
+      },
+      "strategy": {
+        "title": "Strategy configuration",
+        "description": "Configure settings provided by the selected scheduling strategy.",
+        "data": {},
+        "data_description": {}
       }
     },
     "error": {
       "invalid_name": "Enter a non-empty queue name.",
       "name_in_use": "Another resource queue already uses this name.",
       "invalid_strategy": "Unknown scheduling strategy.",
-      "entities_in_use_elsewhere": "A selected entity is already supervised by another resource queue."
+      "entities_in_use_elsewhere": "A selected entity is already supervised by another resource queue.",
+      "invalid_strategy_options": "The selected strategy settings are invalid."
     }
   },
   "services": {
@@ -98,6 +105,12 @@
           "monitored_entities": "Select the light/switch entities controlled by your automations. Other entities will be ignored.",
           "strategy": "FIFO or LIFO. Switch algorithms only when this queue has no active or waiting requests."
         }
+      },
+      "strategy": {
+        "title": "Strategy configuration",
+        "description": "Configure settings specific to the selected scheduling strategy.",
+        "data": {},
+        "data_description": {}
       }
     },
     "error": {
@@ -106,7 +119,8 @@
       "entities_in_use": "Cannot deselect an entity with an active or waiting reservation.",
       "strategy_in_use": "Cannot change scheduling strategy until active and waiting reservations have been cleared.",
       "entities_in_use_elsewhere": "One or more selected entities belong to another resource queue.",
-      "invalid_strategy": "Unknown scheduling strategy."
+      "invalid_strategy": "Unknown scheduling strategy.",
+      "invalid_strategy_options": "The selected strategy settings are invalid."
     }
   }
 }
