@@ -1,4 +1,4 @@
-"""User setup and selection of explicitly supervised light/switch entities."""
+"""Config flow for independent Resource Queue Manager instances."""
 
 from typing import Any
 
@@ -13,117 +13,181 @@ from homeassistant.helpers.selector import (
     NumberSelector,
     NumberSelectorConfig,
     NumberSelectorMode,
+    SelectOptionDict,
+    SelectSelector,
+    SelectSelectorConfig,
+    SelectSelectorMode,
 )
+
 from homeassistant.helpers.storage import Store
 
 from .const import (
     CONF_MAX_ACTIVE,
     CONF_MONITORED_ENTITIES,
+    CONF_NAME,
+    CONF_STRATEGY,
     DEFAULT_MAX_ACTIVE,
     DOMAIN,
 )
+from .strategies import DEFAULT_STRATEGY, STRATEGIES
 
 STORAGE_VERSION = 1
 
-# Native Home Assistant number input instead of a 1-50 slider.
-# The selector validates the range and renders an editable numeric field.
 MAX_ACTIVE_SELECTOR = NumberSelector(
-    NumberSelectorConfig(
-        min=1,
-        max=50,
-        step=1,
-        mode=NumberSelectorMode.BOX,
+    NumberSelectorConfig(min=1, max=50, step=1, mode=NumberSelectorMode.BOX)
+)
+STRATEGY_SELECTOR = SelectSelector(
+    SelectSelectorConfig(
+        options=[
+            SelectOptionDict(value="fifo", label="FIFO — oldest request first"),
+            SelectOptionDict(value="lifo", label="LIFO — newest waiting request first"),
+        ],
+        mode=SelectSelectorMode.DROPDOWN,
     )
+)
+ENTITIES_SELECTOR = EntitySelector(
+    EntitySelectorConfig(domain=["light", "switch"], multiple=True)
 )
 
 
+def _overlapping_entities(hass, selected: list[str], exclude: str | None = None) -> set[str]:
+    """Refuse one physical entity being controlled by two independent queues."""
+    selected_set = set(selected)
+    overlapping: set[str] = set()
+    for entry in hass.config_entries.async_entries(DOMAIN):
+        if entry.entry_id == exclude:
+            continue
+        other = entry.options.get(
+            CONF_MONITORED_ENTITIES,
+            entry.data.get(CONF_MONITORED_ENTITIES, []),
+        )
+        overlapping.update(selected_set.intersection(other))
+    return overlapping
+
+
 class ResourceQueueManagerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
-    """Configure one singleton Resource Queue Manager (FIFO) instance."""
+    """Create distinct queue entries; older singleton entries remain intact."""
 
     VERSION = 1
 
     async def async_step_user(self, user_input: dict | None = None):
-        """Create a config entry from the integrations UI."""
+        errors: dict[str, str] = {}
         if user_input is not None:
-            user_input[CONF_MAX_ACTIVE] = int(user_input[CONF_MAX_ACTIVE])
-            await self.async_set_unique_id(DOMAIN)
-            self._abort_if_unique_id_configured()
-            return self.async_create_entry(
-                title="Resource Queue Manager (FIFO)", data=user_input
-            )
+            name = user_input[CONF_NAME].strip()
+            if not name:
+                errors["base"] = "invalid_name"
+            elif any(e.title == name for e in self.hass.config_entries.async_entries(DOMAIN)):
+                errors["base"] = "name_in_use"
+            elif user_input[CONF_STRATEGY] not in STRATEGIES:
+                errors["base"] = "invalid_strategy"
+            elif _overlapping_entities(
+                self.hass, user_input.get(CONF_MONITORED_ENTITIES, [])
+            ):
+                errors["base"] = "entities_in_use_elsewhere"
+            else:
+                # No shared unique_id: each flow creates an independent config entry.
+                return self.async_create_entry(
+                    title=name,
+                    data={
+                        CONF_NAME: name,
+                        CONF_MAX_ACTIVE: int(user_input[CONF_MAX_ACTIVE]),
+                        CONF_STRATEGY: user_input[CONF_STRATEGY],
+                        CONF_MONITORED_ENTITIES: list(
+                            user_input.get(CONF_MONITORED_ENTITIES, [])
+                        ),
+                    },
+                )
 
         schema = vol.Schema(
             {
+                vol.Required(CONF_NAME, default=(user_input or {}).get(CONF_NAME, "My queue")): str,
                 vol.Required(
-                    CONF_MAX_ACTIVE, default=DEFAULT_MAX_ACTIVE
-                ): MAX_ACTIVE_SELECTOR
+                    CONF_MAX_ACTIVE,
+                    default=(user_input or {}).get(CONF_MAX_ACTIVE, DEFAULT_MAX_ACTIVE),
+                ): MAX_ACTIVE_SELECTOR,
+                vol.Required(
+                    CONF_STRATEGY,
+                    default=(user_input or {}).get(CONF_STRATEGY, DEFAULT_STRATEGY),
+                ): STRATEGY_SELECTOR,
+                vol.Optional(
+                    CONF_MONITORED_ENTITIES,
+                    default=(user_input or {}).get(CONF_MONITORED_ENTITIES, []),
+                ): ENTITIES_SELECTOR,
             }
         )
-        return self.async_show_form(step_id="user", data_schema=schema)
+        return self.async_show_form(step_id="user", data_schema=schema, errors=errors)
 
     @staticmethod
     @callback
-    def async_get_options_flow(
-        config_entry: ConfigEntry,
-    ) -> "ResourceQueueOptionsFlow":
-        """Expose the Configure button in Home Assistant."""
+    def async_get_options_flow(config_entry: ConfigEntry) -> "ResourceQueueOptionsFlow":
         return ResourceQueueOptionsFlow()
 
 
 class ResourceQueueOptionsFlow(OptionsFlowWithReload):
-    """Edit both the slot limit and the explicitly supervised entity list."""
+    """Configure capacity, strategy and supervised entities per entry."""
 
-    async def async_step_init(
-        self, user_input: dict[str, Any] | None = None
-    ):
-        """Validate changes against currently queued reservations."""
+    async def async_step_init(self, user_input: dict[str, Any] | None = None):
         entry = self.config_entry
         errors: dict[str, str] = {}
-        existing = list(entry.options.get(CONF_MONITORED_ENTITIES, []))
-        current_limit = entry.options.get(
-            CONF_MAX_ACTIVE,
-            entry.data.get(CONF_MAX_ACTIVE, DEFAULT_MAX_ACTIVE),
+        selected = list(
+            entry.options.get(
+                CONF_MONITORED_ENTITIES,
+                entry.data.get(CONF_MONITORED_ENTITIES, []),
+            )
         )
-        selected = existing
+        current_limit = entry.options.get(
+            CONF_MAX_ACTIVE, entry.data.get(CONF_MAX_ACTIVE, DEFAULT_MAX_ACTIVE)
+        )
+        current_strategy = entry.options.get(
+            CONF_STRATEGY, entry.data.get(CONF_STRATEGY, DEFAULT_STRATEGY)
+        )
         new_limit = current_limit
+        new_strategy = current_strategy
 
         if user_input is not None:
             selected = list(user_input.get(CONF_MONITORED_ENTITIES, []))
             new_limit = int(user_input[CONF_MAX_ACTIVE])
+            new_strategy = user_input[CONF_STRATEGY]
+            if new_strategy not in STRATEGIES:
+                errors["base"] = "invalid_strategy"
+            elif _overlapping_entities(self.hass, selected, entry.entry_id):
+                errors["base"] = "entities_in_use_elsewhere"
+
             runtime = self.hass.data.get(DOMAIN, {}).get(entry.entry_id)
-            if runtime is not None:
-                # Locking also prevents an action from changing the FIFO while
-                # the configuration is being validated.
+            if not errors and runtime is not None:
                 async with runtime.lock:
                     saved = runtime.manager.export_state()
-                    bindings = saved["bindings"]
-                    active = saved["active"]
-                    if not set(bindings.values()).issubset(selected):
+                    if not set(saved["bindings"].values()).issubset(selected):
                         errors["base"] = "entities_in_use"
-                    elif new_limit < len(active):
+                    elif new_limit < len(saved["active"]):
                         errors["base"] = "max_active_below_reserved"
+                    elif new_strategy != runtime.manager.strategy and (
+                        saved["active"] or saved["waiting"]
+                    ):
+                        errors["base"] = "strategy_in_use"
                     if not errors:
-                        # Fail closed while OptionsFlowWithReload applies the
-                        # new options and reloads this config entry.
                         runtime.manager.pause()
-            else:
-                # A failed/unloaded entry may still have saved bookings.
-                # Never silently reset their count when editing options.
+            elif not errors:
                 try:
                     store = Store(
-                        self.hass,
-                        STORAGE_VERSION,
-                        f"{DOMAIN}.{entry.entry_id}",
+                        self.hass, STORAGE_VERSION, f"{DOMAIN}.{entry.entry_id}"
                     )
                     saved = await store.async_load()
                     bindings = {} if saved is None else saved["bindings"]
                     active = [] if saved is None else saved["active"]
-                    if not isinstance(bindings, dict) or not isinstance(active, list):
+                    waiting = [] if saved is None else saved["waiting"]
+                    if (
+                        not isinstance(bindings, dict)
+                        or not isinstance(active, list)
+                        or not isinstance(waiting, list)
+                    ):
                         raise ValueError("Invalid stored queue")
                     if not set(bindings.values()).issubset(selected):
                         errors["base"] = "entities_in_use"
                     elif new_limit < len(active):
                         errors["base"] = "max_active_below_reserved"
+                    elif new_strategy != current_strategy and (active or waiting):
+                        errors["base"] = "strategy_in_use"
                 except Exception:
                     errors["base"] = "storage_unavailable"
 
@@ -132,23 +196,17 @@ class ResourceQueueOptionsFlow(OptionsFlowWithReload):
                     data={
                         CONF_MONITORED_ENTITIES: selected,
                         CONF_MAX_ACTIVE: new_limit,
+                        CONF_STRATEGY: new_strategy,
                     }
                 )
 
         schema = vol.Schema(
             {
-                vol.Required(
-                    CONF_MAX_ACTIVE,
-                    default=new_limit,
-                ): MAX_ACTIVE_SELECTOR,
+                vol.Required(CONF_MAX_ACTIVE, default=new_limit): MAX_ACTIVE_SELECTOR,
+                vol.Required(CONF_STRATEGY, default=new_strategy): STRATEGY_SELECTOR,
                 vol.Optional(
-                    CONF_MONITORED_ENTITIES,
-                    default=selected,
-                ): EntitySelector(
-                    EntitySelectorConfig(
-                        domain=["light", "switch"], multiple=True
-                    )
-                ),
+                    CONF_MONITORED_ENTITIES, default=selected
+                ): ENTITIES_SELECTOR,
             }
         )
         return self.async_show_form(
