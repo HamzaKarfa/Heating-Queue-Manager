@@ -55,9 +55,9 @@ def strategy_selector(language: str = "en") -> SelectSelector:
             mode=SelectSelectorMode.DROPDOWN,
         )
     )
-ENTITIES_SELECTOR = EntitySelector(
-    EntitySelectorConfig(domain=["light", "switch"], multiple=True)
-)
+# Domain-neutral: accept native entities and helpers (number, text, etc.).
+# Actual safety semantics are enforced per-domain by entity_supervision.py.
+ENTITIES_SELECTOR = EntitySelector(EntitySelectorConfig(multiple=True))
 
 
 def _overlapping_entities(hass, selected: list[str], exclude: str | None = None) -> set[str]:
