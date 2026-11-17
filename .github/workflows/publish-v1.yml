@@ -36,8 +36,15 @@ jobs:
           from pathlib import Path
           manifest = json.loads(Path("custom_components/resource_queue_manager/manifest.json").read_text())
           assert manifest["version"] == "1.0.0", "Manifest is not v1.0.0"
-          assert Path("docs/releases/v1.0.0.md").is_file(), "Missing v1.0.0 release notes"
+          notes_path = Path("docs/releases/v1.0.0.md")
+          assert notes_path.is_file(), "Missing v1.0.0 release notes"
+          notes = notes_path.read_text(encoding="utf-8")
+          assert notes.startswith("# Resource Queue Manager — v1.0.0"), "Wrong release notes title"
+          assert not any(marker in notes for marker in (
+              "not yet published", "Prepared release notes", "- [ ]"
+          )), "Draft content left in public release notes"
           assert Path("docs/MIGRATION_v0.4_to_v1.md").is_file(), "Missing migration guide"
+          assert Path("docs/RELEASE_CHECKLIST_v1.md").is_file(), "Missing acceptance checklist"
           PY
 
   tests:
