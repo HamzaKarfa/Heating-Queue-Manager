@@ -678,3 +678,93 @@ async def test_plugin_request_metadata_service_persists_through_restart(
     assert restored.export_state()["request_data"] == {
         "second": {"priority": 8}
     }
+
+
+async def test_priority_fifo_config_flow_uses_provider_fields(
+    hass: HomeAssistant, queue_entry: MockConfigEntry
+) -> None:
+    """New provider appears in selection and declares its own configuration form."""
+    flow = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": "user"}
+    )
+    assert flow["type"].value == "form"
+    step = await hass.config_entries.flow.async_configure(
+        flow["flow_id"],
+        {
+            "name": "Priority Test",
+            "max_active": 1,
+            "strategy": "priority_fifo",
+            "monitored_entities": [],
+        },
+    )
+    assert step["type"].value == "form"
+    assert step["step_id"] == "strategy"
+    fields = {marker.schema for marker in step["data_schema"].schema}
+    assert fields == {"priority_order"}
+
+    created = await hass.config_entries.flow.async_configure(
+        flow["flow_id"], {"priority_order": "lowest_first"}
+    )
+    assert created["type"].value == "create_entry"
+    assert created["data"]["strategy"] == "priority_fifo"
+    assert created["data"]["strategy_config"] == {
+        "priority_order": "lowest_first"
+    }
+
+
+async def test_priority_fifo_ha_actions_keep_ties_and_survive_reload(
+    hass: HomeAssistant, queue_entry: MockConfigEntry
+) -> None:
+    """Real service calls preserve priorities, FIFO ties and fail-closed restart."""
+    options = await hass.config_entries.options.async_init(queue_entry.entry_id)
+    strategy_form = await hass.config_entries.options.async_configure(
+        options["flow_id"],
+        {
+            "max_active": 1,
+            "strategy": "priority_fifo",
+            "monitored_entities": [f"light.relay_{i}" for i in range(1, 6)],
+        },
+    )
+    assert strategy_form["type"].value == "form"
+    assert strategy_form["step_id"] == "strategy"
+    chosen = await hass.config_entries.options.async_configure(
+        options["flow_id"], {"priority_order": "highest_first"}
+    )
+    assert chosen["type"].value == "create_entry"
+    await hass.async_block_till_done()
+    manager = hass.data[DOMAIN][queue_entry.entry_id].manager
+    assert manager.strategy == "priority_fifo"
+    assert manager.queue.strategy_config == {
+        "priority_order": "highest_first"
+    }
+    assert manager.paused
+
+    await action(hass, "resume")
+    for index, priority in ((1, 1), (2, 4), (3, 8), (4, 4), (5, 10)):
+        await action(
+            hass, "request",
+            resource_id=f"h{index}",
+            entity_id=f"light.relay_{index}",
+            strategy_data={"priority": priority},
+        )
+    assert manager.snapshot().active == ("h1",)
+    assert manager.snapshot().waiting == ("h5", "h3", "h2", "h4")
+
+    with pytest.raises(HomeAssistantError):
+        await action(
+            hass, "request",
+            resource_id="h2", entity_id="light.relay_2",
+            strategy_data={"priority": 7},
+        )
+
+    assert await hass.config_entries.async_reload(queue_entry.entry_id)
+    await hass.async_block_till_done()
+    restored = hass.data[DOMAIN][queue_entry.entry_id].manager
+    assert restored.paused
+    assert restored.snapshot().waiting == ("h5", "h3", "h2", "h4")
+    assert restored.export_state()["request_data"]["h5"] == {"priority": 10}
+    await action(hass, "resume")
+    await action(hass, "release", resource_id="h1")
+    assert restored.snapshot().active == ("h5",)
+    await action(hass, "release", resource_id="h5")
+    assert restored.snapshot().active == ("h3",)
