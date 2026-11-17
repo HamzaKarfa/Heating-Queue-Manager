@@ -12,6 +12,7 @@ class FifoProvider:
 
     key = "fifo"
     label = FifoStrategy.label
+    localized_labels = {"fr": "FIFO — premier arrivé, premier servi"}
     description = "First requested, first granted."
     config_fields = CONFIG_FIELDS
     request_fields = REQUEST_FIELDS
