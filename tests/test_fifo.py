@@ -242,12 +242,18 @@ class ResourceQueueTests(unittest.TestCase):
     def test_strategy_selector_uses_registered_providers(self):
         options = strategy_options()
         self.assertEqual(
-            {option["value"] for option in options}, {"fifo", "lifo"}
+            {option["value"] for option in options},
+            {"fifo", "lifo", "priority_fifo"},
         )
         for option in options:
             provider = get_provider(option["value"])
             self.assertEqual(option["label"], provider.label)
-            self.assertEqual(provider.config_fields, ())
+        self.assertEqual(get_provider("fifo").config_fields, ())
+        self.assertEqual(get_provider("lifo").config_fields, ())
+        self.assertEqual(
+            [field.key for field in get_provider("priority_fifo").config_fields],
+            ["priority_order"],
+        )
 
     def test_provider_rejects_unexpected_settings(self):
         with self.assertRaises(ValueError):
