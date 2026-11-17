@@ -154,7 +154,9 @@ class ResourceQueueManagerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     return self.async_create_entry(title=data[CONF_NAME], data=data)
         return self.async_show_form(
             step_id="strategy",
-            data_schema=strategy_form_schema(strategy, user_input),
+            data_schema=strategy_form_schema(
+                strategy, user_input, self.hass.config.language
+            ),
             errors=errors,
         )
 
@@ -327,6 +329,8 @@ class ResourceQueueOptionsFlow(OptionsFlowWithReload):
 
         return self.async_show_form(
             step_id="strategy",
-            data_schema=strategy_form_schema(strategy, user_input or previous),
+            data_schema=strategy_form_schema(
+                strategy, user_input or previous, self.hass.config.language
+            ),
             errors=errors,
         )
