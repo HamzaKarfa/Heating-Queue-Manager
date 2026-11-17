@@ -234,9 +234,11 @@ class ResourceQueueOptionsFlow(OptionsFlowWithReload):
                     )
                     saved = await store.async_load()
                     saved = {} if saved is None else saved
+                    if not isinstance(saved, dict):
+                        raise ValueError("Invalid stored queue")
                     bindings = saved.get("bindings", {})
-                    active = [] if saved is None else saved["active"]
-                    waiting = [] if saved is None else saved["waiting"]
+                    active = saved.get("active", [])
+                    waiting = saved.get("waiting", [])
                     if (
                         not isinstance(bindings, dict)
                         or not isinstance(active, list)
