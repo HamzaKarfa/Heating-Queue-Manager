@@ -9,16 +9,13 @@ from collections import deque
 from collections.abc import Mapping
 from dataclasses import dataclass
 
-if __package__:
-    from .strategies import (
-        DEFAULT_STRATEGY, QueueRequest, get_strategy,
-        validate_request_data, validate_strategy_config,
-    )
-else:  # Legacy standalone imports used by the pure Python test suite.
-    from strategies import (
-        DEFAULT_STRATEGY, QueueRequest, get_strategy,
-        validate_request_data, validate_strategy_config,
-    )
+from .strategies import (
+    DEFAULT_STRATEGY,
+    QueueRequest,
+    get_strategy,
+    validate_request_data,
+    validate_strategy_config,
+)
 
 
 @dataclass(frozen=True, slots=True)
