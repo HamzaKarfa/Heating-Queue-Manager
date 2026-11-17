@@ -25,12 +25,16 @@ from .strategies import get_provider
 def strategy_form_schema(
     strategy: str,
     previous: dict[str, object] | None = None,
+    language: str = "en",
 ) -> vol.Schema:
     """Build a strategy-specific form from the registered provider metadata."""
     previous = previous or {}
     schema: dict = {}
+    provider = get_provider(strategy)
+    locale = (language or "en").split("-", 1)[0].split("_", 1)[0]
+    localized = getattr(provider, "localized_choices", {}).get(locale, {})
 
-    for field in get_provider(strategy).config_fields:
+    for field in provider.config_fields:
         if field.kind == "text":
             selector = TextSelector(TextSelectorConfig())
         elif field.kind == "boolean":
@@ -48,7 +52,12 @@ def strategy_form_schema(
             selector = SelectSelector(
                 SelectSelectorConfig(
                     options=[
-                        SelectOptionDict(value=choice, label=choice.replace("_", " ").capitalize())
+                        SelectOptionDict(
+                            value=choice,
+                            label=localized.get(field.key, {}).get(
+                                choice, choice.replace("_", " ").capitalize()
+                            ),
+                        )
                         for choice in field.choices
                     ],
                     mode=SelectSelectorMode.DROPDOWN,
