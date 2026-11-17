@@ -13,15 +13,19 @@
         "data_description": {
           "name": "A name to distinguish this queue from other queues (for example Heating).",
           "max_active": "Enter a whole number from 1 to 50. Suggested starting value: 3.",
-          "strategy": "FIFO grants the oldest request; LIFO grants the most recently queued request. Active reservations are never interrupted.",
+          "strategy": "FIFO grants by arrival order; LIFO grants the newest waiting request; Priority FIFO ranks waiting requests first. Active reservations are never interrupted.",
           "monitored_entities": "Optional during setup. Devices must belong to only one resource queue."
         }
       },
       "strategy": {
         "title": "Strategy configuration",
         "description": "Configure settings provided by the selected scheduling strategy.",
-        "data": {},
-        "data_description": {}
+        "data": {
+          "priority_order": "Priority order"
+        },
+        "data_description": {
+          "priority_order": "Highest first: 10 before 1. Lowest first: 1 before 10. Equal priorities retain arrival order."
+        }
       }
     },
     "error": {
@@ -51,7 +55,7 @@
         },
         "strategy_data": {
           "name": "Strategy request data",
-          "description": "Optional fields declared by the selected strategy provider. FIFO and LIFO accept no extra request fields."
+          "description": "Required for Priority FIFO: strategy_data.priority (a number from 1 to 10). FIFO and LIFO require no extra fields."
         }
       }
     },
@@ -107,14 +111,18 @@
         "data_description": {
           "max_active": "Maximum active reservations at once (1–50). Existing reservations are preserved.",
           "monitored_entities": "Select the light/switch entities controlled by your automations. Other entities will be ignored.",
-          "strategy": "FIFO or LIFO. Switch algorithms only when this queue has no active or waiting requests."
+          "strategy": "FIFO grants by arrival order; LIFO grants the newest waiting request; Priority FIFO ranks waiting requests first. Active reservations are never interrupted."
         }
       },
       "strategy": {
         "title": "Strategy configuration",
         "description": "Configure settings specific to the selected scheduling strategy.",
-        "data": {},
-        "data_description": {}
+        "data": {
+          "priority_order": "Priority order"
+        },
+        "data_description": {
+          "priority_order": "Highest first: 10 before 1. Lowest first: 1 before 10. Equal priorities retain arrival order."
+        }
       }
     },
     "error": {
