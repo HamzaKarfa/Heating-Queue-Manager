@@ -29,7 +29,7 @@ from .const import (
     DEFAULT_MAX_ACTIVE,
     DOMAIN,
 )
-from .strategies import DEFAULT_STRATEGY, STRATEGIES
+from .strategies import DEFAULT_STRATEGY, STRATEGIES, strategy_options
 
 STORAGE_VERSION = 1
 
@@ -38,10 +38,7 @@ MAX_ACTIVE_SELECTOR = NumberSelector(
 )
 STRATEGY_SELECTOR = SelectSelector(
     SelectSelectorConfig(
-        options=[
-            SelectOptionDict(value="fifo", label="FIFO — oldest request first"),
-            SelectOptionDict(value="lifo", label="LIFO — newest waiting request first"),
-        ],
+        options=[SelectOptionDict(**item) for item in strategy_options()],
         mode=SelectSelectorMode.DROPDOWN,
     )
 )
