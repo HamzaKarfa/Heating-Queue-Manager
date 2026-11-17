@@ -88,7 +88,7 @@ read a different queue's sensor.
 ### Add a new queue
 
 1. Go to **Settings → Devices & services → Add integration → Resource Queue Manager**.
-2. Give it a unique name; select strategy, capacity and supervised `light`/`switch` entities.
+2. Give it a unique name; select strategy, capacity and supervised Home Assistant entities (native domains and helpers are accepted). For electrical actuators, keep explicit ON/OFF supervision and hardware protections.
 3. Do not assign an entity already supervised by another queue.
 4. Configure the Priority FIFO `priority_order` if relevant.
 5. Find the new queue's sensor IDs; check `paused` and `recovery_issues`; resume this **new** entry only after inspection.
