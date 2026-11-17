@@ -1,7 +1,7 @@
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-Custom%20Integration-41BDF5?logo=homeassistant&logoColor=white)](https://www.home-assistant.io/)
-[![HACS](https://img.shields.io/badge/HACS-Custom%20Repository-41BDF5)](https://hacs.xyz/)
-[![HACS validation](https://github.com/aalexcoding/haier-smartair2-cloud-for-homeassistant-leroy-machine/actions/workflows/hacs.yaml/badge.svg)](https://github.com/aalexcoding/haier-smartair2-cloud-for-homeassistant-leroy-machine/actions/workflows/hacs.yaml)
-[![hassfest](https://github.com/aalexcoding/haier-smartair2-cloud-for-homeassistant-leroy-machine/actions/workflows/hassfest.yaml/badge.svg)](https://github.com/aalexcoding/haier-smartair2-cloud-for-homeassistant-leroy-machine/actions/workflows/hassfest.yaml)
+[![HACS Marketplace](https://img.shields.io/badge/HACS-Marketplace-41BDF5)](https://hacs.xyz/)
+[![Marketplace validation](https://github.com/HamzaKarfa/Resource-Queue-Manager/actions/workflows/validate.yml/badge.svg)](https://github.com/HamzaKarfa/Resource-Queue-Manager/actions/workflows/validate.yml)
+[![Home Assistant tests](https://github.com/HamzaKarfa/Resource-Queue-Manager/actions/workflows/home-assistant-tests.yml/badge.svg)](https://github.com/HamzaKarfa/Resource-Queue-Manager/actions/workflows/home-assistant-tests.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 ![Resource Queue Manager (FIFO) logo](assets/icon.png)
@@ -47,7 +47,7 @@ custom_components/resource_queue_manager/
 └── brand/icon.png
 ```
 
-On Home Assistant 2026.11+, open **Settings → Marketplace → Add from link** and enter `HamzaKarfa/Resource-Queue-Manager`, then install the integration. Until this project is included in the public catalog, use that repository link. Alternatively, copy the `resource_queue_manager` folder into Home Assistant's `config/custom_components`. Restart Home Assistant. Add **Resource Queue Manager (FIFO)** under **Settings → Devices & services**. Under **Configure**, select the supervised entities and maximum reservations. Both setup and Configure display the capacity as an editable **numeric input** (integer 1–50), rather than a slider; the form includes concise guidance for each setting. Verify the equipment and invoke:
+On Home Assistant 2026.11+, open **Settings → Marketplace** and look for **Resource Queue Manager (FIFO)**. The integration has been accepted into the public catalog; if it is not yet visible in Marketplace search, choose **Add from link** and enter `HamzaKarfa/Resource-Queue-Manager`, then install it. Alternatively, copy the `resource_queue_manager` folder into Home Assistant's `config/custom_components`. Restart Home Assistant. Add **Resource Queue Manager (FIFO)** under **Settings → Devices & services**. Under **Configure**, select the supervised entities and maximum reservations. Both setup and Configure display the capacity as an editable **numeric input** (integer 1–50), rather than a slider; the form includes concise guidance for each setting. Verify the equipment and invoke:
 
 ```yaml
 action: resource_queue_manager.resume
@@ -122,26 +122,16 @@ python -m pytest -q tests/ha/test_integration.py
 
 CI exercises both isolated Python code and Home Assistant 2026.11 config entries and services. Tests use simulated states, not physical loads.
 
-## Marketplace publication and validation
+## Marketplace and validation
 
-**Public repository:** https://github.com/HamzaKarfa/Resource-Queue-Manager
+Resource Queue Manager (FIFO) has been accepted into the [Home Assistant Marketplace catalog](https://github.com/hacs/default). If it is not yet visible in Marketplace search, install it using **Add from link** as described above.
 
-The project is currently in a testing phase and is installable directly via **Marketplace → Add from link**, even before its catalog submission is accepted. The user is responsible for verifying automation behavior and independent electrical protections before operating real loads. The integration itself never actuates a device.
-
-Before publishing a catalog submission, the maintainer should:
-
-1. Confirm [HACS / Marketplace validation](https://github.com/HamzaKarfa/Resource-Queue-Manager/actions/workflows/validate.yml) and [Home Assistant integration tests](https://github.com/HamzaKarfa/Resource-Queue-Manager/actions/workflows/home-assistant-tests.yml) are passing on `main`.
-2. Verify a complete queue grant/ON/OFF/release cycle with a low-risk test device, and check all recovery paths before any heater automation is enabled.
-3. Set the GitHub repository **Description** and **Topics** in the repository's **About** panel, verify that GitHub Issues stay enabled, and review the proposed [MIT License](LICENSE) before merging.
-4. Publish a **GitHub Release** matching the integration's `manifest.json` version (a Git tag alone is not a release). Use `docs/releases/v0.4.0.md` as the release notes.
-5. Only then propose adding `HamzaKarfa/Resource-Queue-Manager` alphabetically to the `integration` file in [hacs/default](https://github.com/hacs/default).
-
-Validation runs automatically for pull requests, pushes, and on a weekly schedule; no HACS warnings are deliberately ignored. See [the Home Assistant Marketplace catalog submission guide](https://contributors.home-assistant.io/marketplace/guides/catalog/).
+The repository runs [Marketplace/HACS validation](https://github.com/HamzaKarfa/Resource-Queue-Manager/actions/workflows/validate.yml) (including hassfest) and [Home Assistant integration tests](https://github.com/HamzaKarfa/Resource-Queue-Manager/actions/workflows/home-assistant-tests.yml). Tests use simulated states; they do not replace testing your own automations and independent equipment safety protections.
 
 ## Versioning
 
 The integration's `manifest.json` version is the installed component version. The published GitHub release tag should use the same semantic version prefixed by `v`, for example `v0.4.0`. Published releases, not lightweight tags alone, provide stable update targets to Marketplace users. No automatic release is generated merely by merging this repository's workflow changes.
 
-### License
+## License
 
-This branch **proposes** the [MIT license](LICENSE) to allow redistribution and contribution to a community integration. Repository ownership must approve this choice before merging the publication-readiness PR.
+This project is distributed under the [MIT License](LICENSE).
