@@ -214,7 +214,7 @@ class CoordinatorTests(unittest.TestCase):
         self.assertEqual(manager.release("a").granted, ("c",))
         self.assertEqual(manager.cancel("b").granted, ("d",))
         self.assertEqual(manager.snapshot().active, ("c", "d"))
-        self.assertIsNone(manager.recovery_issues())
+        self.assertEqual(manager.recovery_issues(), ())
 
     def test_input_boolean_retains_on_off_safety(self):
         entities = {"input_boolean.demo": "off"}
