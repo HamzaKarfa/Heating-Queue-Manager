@@ -57,8 +57,8 @@ Request a reservation, without switching the device:
 ```yaml
 action: resource_queue_manager.request
 data:
-  resource_id: chambre_1
-  entity_id: light.relais_chauffage_chambre_1
+  resource_id: room_1
+  entity_id: light.relay_heater_room_1
 ```
 
 Once the sensor's `active` attribute contains `chambre_1`, your heating automation can turn on the relay. After turning it OFF and confirming the Home Assistant state is `off`, release:
@@ -66,7 +66,7 @@ Once the sensor's `active` attribute contains `chambre_1`, your heating automati
 ```yaml
 action: resource_queue_manager.release
 data:
-  resource_id: chambre_1
+  resource_id: room_1
 ```
 
 Cancel a pending request or release an OFF resource:
@@ -74,7 +74,7 @@ Cancel a pending request or release an OFF resource:
 ```yaml
 action: resource_queue_manager.cancel
 data:
-  resource_id: chambre_1
+  resource_id: room_1
 ```
 
 Every newly granted reservation fires `resource_queue_manager_slot_granted` with `resource_id`, `entity_id`, and `config_entry_id`. Use the sensor as the authoritative state if an automation may miss the event.
