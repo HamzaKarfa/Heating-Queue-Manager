@@ -32,7 +32,7 @@ from .const import (
 )
 from .strategies import (
     DEFAULT_STRATEGY,
-    STRATEGIES,
+    PROVIDERS,
     get_provider,
     strategy_options,
     validate_strategy_config,
@@ -88,7 +88,7 @@ class ResourceQueueManagerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 errors["base"] = "invalid_name"
             elif any(e.title == name for e in self.hass.config_entries.async_entries(DOMAIN)):
                 errors["base"] = "name_in_use"
-            elif user_input[CONF_STRATEGY] not in STRATEGIES:
+            elif user_input[CONF_STRATEGY] not in PROVIDERS:
                 errors["base"] = "invalid_strategy"
             elif _overlapping_entities(
                 self.hass, user_input.get(CONF_MONITORED_ENTITIES, [])
@@ -194,7 +194,7 @@ class ResourceQueueOptionsFlow(OptionsFlowWithReload):
             selected = list(user_input.get(CONF_MONITORED_ENTITIES, []))
             new_limit = int(user_input[CONF_MAX_ACTIVE])
             new_strategy = user_input[CONF_STRATEGY]
-            if new_strategy not in STRATEGIES:
+            if new_strategy not in PROVIDERS:
                 errors["base"] = "invalid_strategy"
             elif _overlapping_entities(self.hass, selected, entry.entry_id):
                 errors["base"] = "entities_in_use_elsewhere"
