@@ -14,10 +14,7 @@ request:
       required: true
       example: light.relais_chauffage_chambre_1
       selector:
-        entity:
-          domain:
-            - light
-            - switch
+        entity: {}
     strategy_data:
       required: false
       selector:
