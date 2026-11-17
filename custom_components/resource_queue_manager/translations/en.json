@@ -2,21 +2,33 @@
   "config": {
     "step": {
       "user": {
-        "title": "Initial configuration",
-        "description": "Choose how many resources may hold a reservation at the same time. You can adjust this limit and select supervised entities later under Configure.",
+        "title": "Create a resource queue",
+        "description": "Create an independent queue. Select a scheduling strategy and the light/switch entities to supervise.",
         "data": {
-          "max_active": "Concurrent reservations"
+          "name": "Queue name",
+          "max_active": "Concurrent reservations",
+          "strategy": "Scheduling strategy",
+          "monitored_entities": "Supervised entities"
         },
         "data_description": {
-          "max_active": "Enter a whole number from 1 to 50. Suggested starting value: 3."
+          "name": "A name to distinguish this queue from other queues (for example Heating).",
+          "max_active": "Enter a whole number from 1 to 50. Suggested starting value: 3.",
+          "strategy": "FIFO grants the oldest request; LIFO grants the most recently queued request. Active reservations are never interrupted.",
+          "monitored_entities": "Optional during setup. Devices must belong to only one resource queue."
         }
       }
+    },
+    "error": {
+      "invalid_name": "Enter a non-empty queue name.",
+      "name_in_use": "Another resource queue already uses this name.",
+      "invalid_strategy": "Unknown scheduling strategy.",
+      "entities_in_use_elsewhere": "A selected entity is already supervised by another resource queue."
     }
   },
   "services": {
     "request": {
       "name": "Request slot",
-      "description": "Request a FIFO slot without actuating an entity.",
+      "description": "Request a resource queue slot without actuating an entity.",
       "fields": {
         "resource_id": {
           "name": "Resource ID",
@@ -25,6 +37,10 @@
         "entity_id": {
           "name": "Supervised entity",
           "description": "Supervised light or switch entity that must be OFF before release."
+        },
+        "config_entry_id": {
+          "name": "Resource queue",
+          "description": "Target a particular queue. Optional only when exactly one queue is installed."
         }
       }
     },
@@ -35,6 +51,10 @@
         "resource_id": {
           "name": "Resource ID",
           "description": "Previously requested resource ID."
+        },
+        "config_entry_id": {
+          "name": "Resource queue",
+          "description": "Target a particular queue. Optional only when exactly one queue is installed."
         }
       }
     },
@@ -45,33 +65,48 @@
         "resource_id": {
           "name": "Resource ID",
           "description": "Previously requested resource ID."
+        },
+        "config_entry_id": {
+          "name": "Resource queue",
+          "description": "Target a particular queue. Optional only when exactly one queue is installed."
         }
       }
     },
     "resume": {
       "name": "Resume queue after restart",
-      "description": "Verify supervised entities and resume FIFO grants. Inspect equipment before recovery."
+      "description": "Verify supervised entities and resume grants. Inspect equipment before recovery.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Resource queue",
+          "description": "Target a particular queue. Optional only when exactly one queue is installed."
+        }
+      }
     }
   },
   "options": {
     "step": {
       "init": {
-        "title": "Resources and capacity",
-        "description": "Choose which resources can request a FIFO slot and set the queue capacity.",
+        "title": "Resources, capacity and scheduling",
+        "description": "Configure the scheduling strategy and the entities supervised by this queue. A strategy cannot change while work remains queued.",
         "data": {
           "monitored_entities": "Supervised entities",
-          "max_active": "Concurrent reservations"
+          "max_active": "Concurrent reservations",
+          "strategy": "Scheduling strategy"
         },
         "data_description": {
           "max_active": "Maximum active reservations at once (1–50). Existing reservations are preserved.",
-          "monitored_entities": "Select the light/switch entities controlled by your automations. Other entities will be ignored."
+          "monitored_entities": "Select the light/switch entities controlled by your automations. Other entities will be ignored.",
+          "strategy": "FIFO or LIFO. Switch algorithms only when this queue has no active or waiting requests."
         }
       }
     },
     "error": {
       "storage_unavailable": "Cannot read saved bookings. Configuration unchanged.",
       "max_active_below_reserved": "Cannot reduce the limit below the number of currently active reservations.",
-      "entities_in_use": "Cannot deselect an entity with an active or waiting reservation."
+      "entities_in_use": "Cannot deselect an entity with an active or waiting reservation.",
+      "strategy_in_use": "Cannot change scheduling strategy until active and waiting reservations have been cleared.",
+      "entities_in_use_elsewhere": "One or more selected entities belong to another resource queue.",
+      "invalid_strategy": "Unknown scheduling strategy."
     }
   }
 }
