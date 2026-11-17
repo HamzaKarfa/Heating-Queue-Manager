@@ -29,7 +29,7 @@
 - **Unambiguous service routing** with `config_entry_id` when multiple entries exist.
 - Four read-only diagnostic sensors **per queue**, with strategy and entry ID in their attributes.
 
-See [v1 architecture](docs/V1_ARCHITECTURE.md), [migration guide](docs/MIGRATION_v0.4_to_v1.md), [developer setup](docs/DEVELOPMENT.md) and [v1 release notes](docs/releases/v1.0.0.md).
+See [v1 architecture](docs/V1_ARCHITECTURE.md), [migration guide](docs/MIGRATION_v0.4_to_v1.md), [developer setup](docs/DEVELOPMENT.md), [changelog](CHANGELOG.md) and [v1 release notes](docs/releases/v1.0.0.md).
 
 ## Scheduling example
 
