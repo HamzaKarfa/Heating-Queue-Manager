@@ -4,9 +4,9 @@ No Home Assistant imports and NO physical entity control. All operations are
 synchronous; the HA adapter serializes state mutations and disk writes.
 """
 
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping
 from .engine import ResourceQueue, QueueResult
-from .strategies import DEFAULT_STRATEGY
+from .strategies import DEFAULT_STRATEGY, validate_strategy_config
 
 
 class QueueStateError(ValueError):
@@ -26,8 +26,9 @@ class ResourceQueueCoordinator:
         entity_state: Callable[[str], str | None],
         monitored_entities: Iterable[str] = (),
         strategy: str = DEFAULT_STRATEGY,
+        strategy_config: Mapping[str, object] | None = None,
     ) -> None:
-        self.queue = ResourceQueue(max_active, strategy)
+        self.queue = ResourceQueue(max_active, strategy, strategy_config)
         self._entity_state = entity_state
         self._entities: dict[str, str] = {}
         monitored = list(monitored_entities)
@@ -47,6 +48,7 @@ class ResourceQueueCoordinator:
         monitored_entities: Iterable[str] = (),
         legacy_max_active: int | None = None,
         strategy: str = DEFAULT_STRATEGY,
+        strategy_config: Mapping[str, object] | None = None,
     ) -> "ResourceQueueCoordinator":
         """Restore FIFO order and entity registry; always start paused."""
         if not isinstance(saved, dict):
@@ -60,15 +62,20 @@ class ResourceQueueCoordinator:
             legacy_max_active if legacy_max_active is not None else max_active,
         )
         saved_strategy = saved.get("strategy", DEFAULT_STRATEGY)
+        saved_config = saved.get("strategy_config", {})
+        configured = validate_strategy_config(strategy, strategy_config)
         saved_active = saved.get("active")
         saved_waiting = saved.get("waiting")
         # Never silently reinterpret already queued requests under a new policy.
-        if saved_strategy != strategy and (saved_active or saved_waiting):
+        if (saved_strategy != strategy or saved_config != configured) and (
+            saved_active or saved_waiting
+        ):
             raise QueueStateError(
-                "Cannot change strategy while reservations or requests are pending"
+                "Cannot change strategy or settings while reservations or requests are pending"
             )
         queue = ResourceQueue.from_snapshot(
-            stored_limit, saved_active, saved_waiting, strategy=strategy
+            stored_limit, saved_active, saved_waiting,
+            strategy=strategy, strategy_config=configured,
         )
         if len(queue.snapshot().active) > max_active:
             raise QueueStateError(
@@ -91,7 +98,10 @@ class ResourceQueueCoordinator:
             ):
                 raise QueueStateError("Legacy entity registry disagrees with queue")
 
-        instance = cls(max_active, entity_state, monitored_entities, strategy=strategy)
+        instance = cls(
+            max_active, entity_state, monitored_entities,
+            strategy=strategy, strategy_config=configured,
+        )
         for resource, entity in bindings.items():
             instance._validate_resource_id(resource)
             instance._validate_entity_id(entity)
@@ -120,6 +130,7 @@ class ResourceQueueCoordinator:
             "waiting": list(snapshot.waiting),
             "max_active": self.max_active,
             "strategy": self.strategy,
+            "strategy_config": dict(self.queue.strategy_config),
             "bindings": dict(self._entities),
         }
 
