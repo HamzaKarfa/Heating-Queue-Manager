@@ -460,3 +460,96 @@ async def test_second_config_flow_asks_for_name_and_strategy(
     assert flow["type"].value == "form"
     fields = {marker.schema for marker in flow["data_schema"].schema}
     assert {"name", "max_active", "strategy", "monitored_entities"} <= fields
+
+
+@pytest.fixture
+def configured_test_strategy(monkeypatch):
+    """Register a test-only plugin with real declarative configuration fields."""
+    from custom_components.resource_queue_manager.strategies import (
+        PROVIDERS,
+        FifoStrategy,
+        StrategyConfigField,
+    )
+
+    class SampleProvider:
+        key = "sample_policy"
+        label = "Sample configurable policy"
+        description = "Exercise native strategy-specific form steps."
+        config_fields = (
+            StrategyConfigField(
+                key="threshold", label="Threshold", kind="number",
+                required=True, minimum=1, maximum=10
+            ),
+            StrategyConfigField(
+                key="flavor", label="Flavor", kind="select",
+                choices=("one", "two"), default="one"
+            ),
+        )
+
+        def create(self, config=None):
+            assert config is not None
+            assert 1 <= config["threshold"] <= 10
+            return FifoStrategy()
+
+    monkeypatch.setitem(PROVIDERS, "sample_policy", SampleProvider())
+
+
+async def test_config_flow_renders_provider_options_and_persists_them(
+    hass: HomeAssistant, configured_test_strategy
+) -> None:
+    """A strategy can supply setup fields without modifying config_flow.py."""
+    assert await async_setup_component(hass, DOMAIN, {})
+    first = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": "user"}
+    )
+    assert first["type"].value == "form"
+    next_step = await hass.config_entries.flow.async_configure(
+        first["flow_id"],
+        {
+            "name": "Configurable Queue",
+            "max_active": 1,
+            "strategy": "sample_policy",
+            "monitored_entities": [],
+        },
+    )
+    assert next_step["type"].value == "form"
+    assert next_step["step_id"] == "strategy"
+    fields = {marker.schema for marker in next_step["data_schema"].schema}
+    assert fields == {"threshold", "flavor"}
+
+    created = await hass.config_entries.flow.async_configure(
+        first["flow_id"], {"threshold": 5, "flavor": "two"}
+    )
+    assert created["type"].value == "create_entry"
+    assert created["data"]["strategy_config"] == {
+        "threshold": 5, "flavor": "two"
+    }
+
+
+async def test_options_flow_updates_provider_settings_and_recovers(
+    hass: HomeAssistant, queue_entry: MockConfigEntry, configured_test_strategy
+) -> None:
+    """Configuration changes run through an extra provider-specific step."""
+    flow = await hass.config_entries.options.async_init(queue_entry.entry_id)
+    selected = await hass.config_entries.options.async_configure(
+        flow["flow_id"],
+        {
+            "max_active": 3,
+            "strategy": "sample_policy",
+            "monitored_entities": [f"light.relay_{i}" for i in range(1, 6)],
+        },
+    )
+    assert selected["type"].value == "form"
+    assert selected["step_id"] == "strategy"
+    finished = await hass.config_entries.options.async_configure(
+        flow["flow_id"], {"threshold": 3, "flavor": "one"}
+    )
+    assert finished["type"].value == "create_entry"
+    await hass.async_block_till_done()
+    assert queue_entry.options["strategy"] == "sample_policy"
+    assert queue_entry.options["strategy_config"] == {
+        "threshold": 3, "flavor": "one"
+    }
+    runtime = hass.data[DOMAIN][queue_entry.entry_id].manager
+    assert runtime.paused
+    assert runtime.queue.strategy_config["threshold"] == 3
