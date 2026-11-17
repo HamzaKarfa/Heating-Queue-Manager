@@ -79,14 +79,15 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
                 )
             return entry_id, runtime
 
-        # Preserve v0.4 automations for users with one configured queue.
+        # Preserve v0.4 automations ONLY when exactly one entry is configured.
+        # A second entry being temporarily unloaded must not make routing implicit.
+        if len(hass.config_entries.async_entries(DOMAIN)) > 1:
+            raise HomeAssistantError(
+                "Multiple resource queues are configured; specify config_entry_id"
+            )
         if len(loaded) == 1:
             return next(iter(loaded.items()))
-        if not loaded:
-            raise HomeAssistantError("No Resource Queue Manager entry is loaded")
-        raise HomeAssistantError(
-            "Multiple resource queues are configured; specify config_entry_id"
-        )
+        raise HomeAssistantError("No Resource Queue Manager entry is loaded")
 
     def _publish(entry_id: str, runtime: QueueRuntime, result: QueueResult) -> None:
         """Publish only after the queue snapshot has been written to disk."""
