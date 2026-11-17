@@ -43,6 +43,12 @@ Une même entité ne peut pas être supervisée par deux files. Il n'existe **au
 
 Chaque action doit cibler l'entrée concernée avec `config_entry_id` lorsqu'au moins deux gestionnaires sont configurés. Il s'agit de l'**identifiant de l'entrée Home Assistant**, proposé dans le sélecteur des outils de développement, pas de son nom.
 
+Les actions `request`, `release`, `cancel` et `resume` sont disponibles depuis **Outils de développement → Actions**. Voici leur présentation dans Home Assistant en français :
+
+![Actions Resource Queue Manager dans Home Assistant : demander, libérer, annuler et reprendre une file](assets/resource-queue-manager-actions.webp)
+
+**Test rapide avec une entité sans risque :** après vérification des relais supervisés, sélectionner la file de test puis exécuter `resume`. Envoyer une demande `request` avec un `resource_id` de test et une entité supervisée ; vérifier que son capteur `active` augmente. En laissant l'entité test à l'état `off`, effectuer `release` et confirmer que `active` diminue. Vérifier également `cancel` sur une demande en attente. Ne pas utiliser un radiateur réel pour le premier essai.
+
 ### Reprendre une file après le démarrage
 
 À chaque redémarrage, les gestionnaires reviennent en mode `paused`. Il faut contrôler les entités supervisées puis reprendre **chaque** file :
