@@ -15,8 +15,10 @@ from homeassistant.helpers.storage import Store
 
 from .const import (
     ATTR_RESOURCE_ID,
+    ATTR_CONFIG_ENTRY_ID,
     ATTR_ENTITY_ID,
     CONF_MAX_ACTIVE,
+    CONF_STRATEGY,
     CONF_MONITORED_ENTITIES,
     DEFAULT_MAX_ACTIVE,
     DOMAIN,
@@ -29,6 +31,7 @@ from .const import (
 )
 from .coordinator import ResourceQueueCoordinator, QueueStateError
 from .fifo import QueueResult
+from .strategies import DEFAULT_STRATEGY
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
@@ -39,9 +42,16 @@ REQUEST_SCHEMA = vol.Schema(
     {
         vol.Required(ATTR_RESOURCE_ID): cv.string,
         vol.Required(ATTR_ENTITY_ID): cv.entity_id,
+        vol.Optional(ATTR_CONFIG_ENTRY_ID): cv.string,
     }
 )
-RESOURCE_SCHEMA = vol.Schema({vol.Required(ATTR_RESOURCE_ID): cv.string})
+RESOURCE_SCHEMA = vol.Schema(
+    {
+        vol.Required(ATTR_RESOURCE_ID): cv.string,
+        vol.Optional(ATTR_CONFIG_ENTRY_ID): cv.string,
+    }
+)
+RESUME_SCHEMA = vol.Schema({vol.Optional(ATTR_CONFIG_ENTRY_ID): cv.string})
 
 
 @dataclass
@@ -57,13 +67,26 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     """Expose actions once; every queue change is serialized and saved."""
     hass.data.setdefault(DOMAIN, {})
 
-    def _get_runtime() -> tuple[str, QueueRuntime]:
-        loaded = hass.data[DOMAIN]
-        if len(loaded) != 1:
-            raise HomeAssistantError(
-                "Resource Queue Manager (FIFO) must have exactly one loaded config entry"
-            )
-        return next(iter(loaded.items()))
+    def _get_runtime(call: ServiceCall) -> tuple[str, QueueRuntime]:
+        """Route an action to the selected queue without implicit cross-entry writes."""
+        loaded: dict[str, QueueRuntime] = hass.data[DOMAIN]
+        entry_id = call.data.get(ATTR_CONFIG_ENTRY_ID)
+        if entry_id is not None:
+            runtime = loaded.get(entry_id)
+            if runtime is None:
+                raise HomeAssistantError(
+                    f"Resource Queue Manager entry {entry_id!r} is not loaded"
+                )
+            return entry_id, runtime
+
+        # Preserve v0.4 automations for users with one configured queue.
+        if len(loaded) == 1:
+            return next(iter(loaded.items()))
+        if not loaded:
+            raise HomeAssistantError("No Resource Queue Manager entry is loaded")
+        raise HomeAssistantError(
+            "Multiple resource queues are configured; specify config_entry_id"
+        )
 
     def _publish(entry_id: str, runtime: QueueRuntime, result: QueueResult) -> None:
         """Publish only after the queue snapshot has been written to disk."""
@@ -89,7 +112,7 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
             ) from err
 
     async def _mutate(call: ServiceCall, operation: str) -> None:
-        entry_id, runtime = _get_runtime()
+        entry_id, runtime = _get_runtime(call)
         async with runtime.lock:
             try:
                 if operation == SERVICE_REQUEST:
@@ -126,7 +149,7 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
 
     async def async_resume(call: ServiceCall) -> None:
         """Explicitly re-enable grants after entity state inspection."""
-        entry_id, runtime = _get_runtime()
+        entry_id, runtime = _get_runtime(call)
         async with runtime.lock:
             try:
                 result = runtime.manager.resume()
@@ -149,7 +172,7 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
         DOMAIN, SERVICE_CANCEL, async_cancel, schema=RESOURCE_SCHEMA
     )
     hass.services.async_register(
-        DOMAIN, SERVICE_RESUME, async_resume, schema=vol.Schema({})
+        DOMAIN, SERVICE_RESUME, async_resume, schema=RESUME_SCHEMA
     )
     return True
 
@@ -160,6 +183,24 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         state = hass.states.get(entity_id)
         return state.state if state is not None else None
 
+    # Independent queues must never supervise the same physical entity.
+    supervised = set(
+        entry.options.get(
+            CONF_MONITORED_ENTITIES,
+            entry.data.get(CONF_MONITORED_ENTITIES, []),
+        )
+    )
+    for other_id, other in hass.data.get(DOMAIN, {}).items():
+        conflict = supervised.intersection(other.manager.monitored_entities)
+        if conflict:
+            raise ConfigEntryNotReady(
+                f"Entities already supervised by queue {other_id}: "
+                + ", ".join(sorted(conflict))
+            )
+
+    strategy = entry.options.get(
+        CONF_STRATEGY, entry.data.get(CONF_STRATEGY, DEFAULT_STRATEGY)
+    )
     store = Store(
         hass, STORAGE_VERSION, f"{DOMAIN}.{entry.entry_id}"
     )
@@ -172,7 +213,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                     entry.data.get(CONF_MAX_ACTIVE, DEFAULT_MAX_ACTIVE),
                 ),
                 entity_state=get_entity_state,
-                monitored_entities=entry.options.get(CONF_MONITORED_ENTITIES, []),
+                monitored_entities=supervised,
+                strategy=strategy,
             )
         else:
             manager = ResourceQueueCoordinator.from_state(
@@ -182,7 +224,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 ),
                 entity_state=get_entity_state,
                 saved=saved,
-                monitored_entities=entry.options.get(CONF_MONITORED_ENTITIES, []),
+                monitored_entities=supervised,
+                strategy=strategy,
                 legacy_max_active=entry.data.get(
                     CONF_MAX_ACTIVE, DEFAULT_MAX_ACTIVE
                 ),
