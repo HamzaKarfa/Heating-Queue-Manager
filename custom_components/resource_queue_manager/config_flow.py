@@ -119,7 +119,7 @@ class ResourceQueueManagerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 vol.Required(
                     CONF_STRATEGY,
                     default=(user_input or {}).get(CONF_STRATEGY, DEFAULT_STRATEGY),
-                ): strategy_selector(),
+                ): strategy_selector(self.hass.config.language),
                 vol.Optional(
                     CONF_MONITORED_ENTITIES,
                     default=(user_input or {}).get(CONF_MONITORED_ENTITIES, []),
@@ -284,7 +284,7 @@ class ResourceQueueOptionsFlow(OptionsFlowWithReload):
         schema = vol.Schema(
             {
                 vol.Required(CONF_MAX_ACTIVE, default=new_limit): MAX_ACTIVE_SELECTOR,
-                vol.Required(CONF_STRATEGY, default=new_strategy): strategy_selector(),
+                vol.Required(CONF_STRATEGY, default=new_strategy): strategy_selector(self.hass.config.language),
                 vol.Optional(
                     CONF_MONITORED_ENTITIES, default=selected
                 ): ENTITIES_SELECTOR,
