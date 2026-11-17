@@ -189,9 +189,62 @@ class CoordinatorTests(unittest.TestCase):
     def test_unknown_release_is_idempotent(self):
         self.assertEqual(self.manager.release("missing").active, ())
 
-    def test_validates_relay_domain(self):
-        with self.assertRaises(QueueStateError):
+    def test_nonconfigured_entity_is_rejected_regardless_of_domain(self):
+        with self.assertRaisesRegex(QueueStateError, "not supervised"):
             self.manager.request("h1", "sensor.temperature")
+
+    def test_invalid_entity_identifier_is_rejected(self):
+        with self.assertRaisesRegex(QueueStateError, "valid Home Assistant"):
+            self.manager.request("h1", "sensor.not valid")
+
+    def test_native_number_text_and_helpers_are_logical_resources(self):
+        entities = {
+            "input_number.test": "12.5",
+            "input_text.test": "hello",
+            "number.native": "23",
+            "text.native": "",
+        }
+        manager = ResourceQueueCoordinator(2, entities.get, entities)
+        manager.request("a", "input_number.test")
+        manager.request("b", "input_text.test")
+        manager.request("c", "number.native")
+        manager.request("d", "text.native")
+        self.assertEqual(manager.snapshot().active, ("a", "b"))
+        self.assertEqual(manager.snapshot().waiting, ("c", "d"))
+        self.assertEqual(manager.release("a").granted, ("c",))
+        self.assertEqual(manager.cancel("b").granted, ("d",))
+        self.assertEqual(manager.snapshot().active, ("c", "d"))
+        self.assertIsNone(manager.recovery_issues())
+
+    def test_input_boolean_retains_on_off_safety(self):
+        entities = {"input_boolean.demo": "off"}
+        manager = ResourceQueueCoordinator(1, entities.get, entities)
+        manager.request("a", "input_boolean.demo")
+        entities["input_boolean.demo"] = "on"
+        self.assertRaisesRegex(QueueStateError, "must be OFF", manager.release, "a")
+        self.assertEqual(manager.snapshot().active, ("a",))
+        entities["input_boolean.demo"] = "off"
+        manager.release("a")
+        self.assertEqual(manager.snapshot().active, ())
+
+    def test_generic_resources_fail_closed_when_unavailable(self):
+        entities = {"input_text.demo": "ready"}
+        manager = ResourceQueueCoordinator(1, entities.get, entities)
+        manager.request("a", "input_text.demo")
+        saved = manager.export_state()
+        entities["input_text.demo"] = "unavailable"
+        with self.assertRaisesRegex(QueueStateError, "must be available"):
+            manager.release("a")
+        self.assertEqual(manager.snapshot().active, ("a",))
+        restarted = ResourceQueueCoordinator.from_state(
+            1, entities.get, saved, monitored_entities=entities
+        )
+        with self.assertRaisesRegex(QueueStateError, "Recovery blocked"):
+            restarted.resume()
+        self.assertTrue(restarted.paused)
+        entities["input_text.demo"] = "ok"
+        restarted.resume()
+        self.assertEqual(restarted.release("a").active, ())
 
     def test_no_more_than_capacity_after_burst(self):
         for i in range(1, 8):
