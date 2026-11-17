@@ -67,7 +67,7 @@ data:
   entity_id: light.relay_heater_room_1
 ```
 
-Once the sensor's `active` attribute contains `chambre_1`, your heating automation can turn on the relay. After turning it OFF and confirming the Home Assistant state is `off`, release:
+Once the sensor's `active` attribute contains `room_1`, your heating automation can turn on the relay. After turning it OFF and confirming the Home Assistant state is `off`, release:
 
 ```yaml
 action: resource_queue_manager.release
