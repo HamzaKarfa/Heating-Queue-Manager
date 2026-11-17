@@ -1,5 +1,7 @@
 # Resource Queue Manager — Guide en français
 
+[![Add to My Home Assistant](https://my.home-assistant.io/badges/marketplace_repository.svg)](https://my.home-assistant.io/redirect/marketplace_repository/?owner=HamzaKarfa&repository=Resource-Queue-Manager&category=integration)
+
 [Documentation complète en anglais](README.md) · [Architecture v1](docs/V1_ARCHITECTURE.md) · [Migration v0.4 → v1](docs/MIGRATION_v0.4_to_v1.md) · [Notes de version](docs/releases/v1.0.0.md)
 
 **Resource Queue Manager** permet de gérer plusieurs files de ressources indépendantes dans Home Assistant, avec les stratégies **FIFO, LIFO et FIFO avec priorité**, une capacité configurable et des réservations persistantes. Les files coordonnent les autorisations ; les automatisations restent responsables de la commande des appareils.
