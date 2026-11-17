@@ -1,6 +1,6 @@
 # Version 1 architecture — multiple queue managers
 
-This document describes the **work-in-progress v1 refactor**. The published v0.4 release remains unchanged until tests, migration, and review are complete.
+This document describes the **v1.0.0 release candidate**. The manifest version has been staged only on the development branch; the published v0.4 release stays unchanged until tests, manual migration review, merge and explicit publication are complete.
 
 ## Goals and boundaries
 
@@ -68,7 +68,7 @@ The dependency direction is **Home Assistant adapter → coordinator → engine 
 
 `QueueStrategy` now implements `enqueue(waiting, request, requests)`, where `request` is a `QueueRequest(resource_id, data)` and `requests` lets an algorithm inspect metadata of other queued resources. The engine consumes from the left of the waiting deque and always enforces capacity. FIFO/LIFO ignore request metadata; a custom algorithm can use it to reorder the queue without editing the engine.
 
-`registry.py` explicitly registers provider instances. The Home Assistant strategy dropdown now reads its labels and values directly from the registry. This avoids adding hard-coded strategy names to `config_flow.py` every time another simple strategy is registered.
+`registry.py` explicitly registers provider instances. The Home Assistant strategy dropdown reads labels and values from that registry. Providers may also declare `localized_labels` and `localized_choices`, so French labels and choice text remain owned by each plugin rather than being hard-coded in `config_flow.py`.
 
 ### Plugin-specific configuration and UI
 
@@ -91,7 +91,7 @@ CONFIG_FIELDS = (
 Its `request.py` declares a required numeric `priority` from 1 through 10.
 Plain FIFO and LIFO do not accept any strategy-specific request data.
 
-Those fields would automatically appear in the host's additional strategy form. Each new plugin still needs appropriate English translation keys for its fields. Per-request fields are now declared separately through a plugin's `request.py` and `request_fields` provider attribute. The common Home Assistant `request` action exposes an **optional `strategy_data` object** whose keys are checked strictly against that selected provider's request schema. The engine receives a `QueueRequest(resource_id, data)` and persists non-empty data in a new `request_data` mapping alongside the existing ID-only `active`/`waiting` lists. Older snapshots missing `request_data` restore normally for FIFO/LIFO.
+These fields appear in the host's additional strategy form. New plugin fields must have matching keys in `strings.json` and `translations/en.json` / `fr.json`. Per-request fields are now declared separately through a plugin's `request.py` and `request_fields` provider attribute. The common Home Assistant `request` action exposes an **optional `strategy_data` object** whose keys are checked strictly against that selected provider's request schema. The engine receives a `QueueRequest(resource_id, data)` and persists non-empty data in a new `request_data` mapping alongside the existing ID-only `active`/`waiting` lists. Older snapshots missing `request_data` restore normally for FIFO/LIFO.
 
 For a **Priority FIFO** queue, a supported request looks like:
 
@@ -169,7 +169,7 @@ The grant event retains `config_entry_id` for consumers to distinguish queues. T
 
 ## Release gate
 
-Before bumping `manifest.json` to `1.0.0` and publishing:
+The `manifest.json` version is now staged at `1.0.0`. **Before publishing a GitHub Release** after merging:
 
 - [ ] Pure-Python engine and coordinator tests pass (FIFO, LIFO, Priority FIFO, recovery, invalid policy).
 - [ ] Home Assistant 2026.11 integration tests pass with two independent config entries.
@@ -177,4 +177,5 @@ Before bumping `manifest.json` to `1.0.0` and publishing:
 - [ ] Manual setup, rename, options, entry removal and service-selector checks.
 - [ ] Verify upgrades from a populated v0.4 queue do not lose saved reservations.
 - [ ] Validate actual entity IDs and YAML examples in Home Assistant.
-- [ ] Review English translations and documentation.
+- [ ] Review English and French translations and documentation.
+- [ ] Manually dispatch the guarded `publish-v1.yml` workflow from `main` with the confirmation token; do not create a tag from the PR.
