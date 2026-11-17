@@ -2,11 +2,12 @@
 
 from collections import deque
 from dataclasses import dataclass
+from collections.abc import Mapping
 
 if __package__:
-    from .strategies import DEFAULT_STRATEGY, get_strategy
+    from .strategies import DEFAULT_STRATEGY, get_strategy, validate_strategy_config
 else:  # Standalone pure-Python tests import fifo.py directly.
-    from strategies import DEFAULT_STRATEGY, get_strategy
+    from strategies import DEFAULT_STRATEGY, get_strategy, validate_strategy_config
 
 
 @dataclass(frozen=True, slots=True)
@@ -19,19 +20,25 @@ class QueueResult:
 
 
 class ResourceQueue:
-    """First-in, first-out scheduler with a hard reservation count limit.
+    """Strategy-independent scheduler with a hard reservation count limit.
 
     The caller owns all physical switching and must confirm a entity is OFF
     before releasing its reservation. Requests and releases should be
     serialized by the integration's coordinator.
     """
 
-    def __init__(self, max_active: int = 3, strategy: str = DEFAULT_STRATEGY) -> None:
+    def __init__(
+        self,
+        max_active: int = 3,
+        strategy: str = DEFAULT_STRATEGY,
+        strategy_config: Mapping[str, object] | None = None,
+    ) -> None:
         if not isinstance(max_active, int) or isinstance(max_active, bool) or max_active < 1:
             raise ValueError("max_active must be a positive integer")
         self.max_active = max_active
         self.strategy = strategy
-        self._strategy = get_strategy(strategy)
+        self.strategy_config = validate_strategy_config(strategy, strategy_config)
+        self._strategy = get_strategy(strategy, self.strategy_config)
         self._active: dict[str, None] = {}
         self._waiting: deque[str] = deque()
 
@@ -42,13 +49,14 @@ class ResourceQueue:
         active: object,
         waiting: object,
         strategy: str = DEFAULT_STRATEGY,
+        strategy_config: Mapping[str, object] | None = None,
     ) -> "ResourceQueue":
         """Restore an exact ordering without granting any new reservations.
 
         Invalid or inconsistent persisted data is rejected, never silently
         converted into an empty queue.
         """
-        instance = cls(max_active, strategy)
+        instance = cls(max_active, strategy, strategy_config)
         if not isinstance(active, list) or not isinstance(waiting, list):
             raise ValueError("stored active and waiting must be lists")
 
