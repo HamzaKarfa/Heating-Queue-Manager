@@ -44,12 +44,14 @@ STORAGE_VERSION = 1
 MAX_ACTIVE_SELECTOR = NumberSelector(
     NumberSelectorConfig(min=1, max=50, step=1, mode=NumberSelectorMode.BOX)
 )
-STRATEGY_SELECTOR = SelectSelector(
-    SelectSelectorConfig(
-        options=[SelectOptionDict(**item) for item in strategy_options()],
-        mode=SelectSelectorMode.DROPDOWN,
+def strategy_selector() -> SelectSelector:
+    """Refresh choices from the registered providers for every HA form."""
+    return SelectSelector(
+        SelectSelectorConfig(
+            options=[SelectOptionDict(**item) for item in strategy_options()],
+            mode=SelectSelectorMode.DROPDOWN,
+        )
     )
-)
 ENTITIES_SELECTOR = EntitySelector(
     EntitySelectorConfig(domain=["light", "switch"], multiple=True)
 )
@@ -114,7 +116,7 @@ class ResourceQueueManagerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 vol.Required(
                     CONF_STRATEGY,
                     default=(user_input or {}).get(CONF_STRATEGY, DEFAULT_STRATEGY),
-                ): STRATEGY_SELECTOR,
+                ): strategy_selector(),
                 vol.Optional(
                     CONF_MONITORED_ENTITIES,
                     default=(user_input or {}).get(CONF_MONITORED_ENTITIES, []),
@@ -250,7 +252,7 @@ class ResourceQueueOptionsFlow(OptionsFlowWithReload):
         schema = vol.Schema(
             {
                 vol.Required(CONF_MAX_ACTIVE, default=new_limit): MAX_ACTIVE_SELECTOR,
-                vol.Required(CONF_STRATEGY, default=new_strategy): STRATEGY_SELECTOR,
+                vol.Required(CONF_STRATEGY, default=new_strategy): strategy_selector(),
                 vol.Optional(
                     CONF_MONITORED_ENTITIES, default=selected
                 ): ENTITIES_SELECTOR,
