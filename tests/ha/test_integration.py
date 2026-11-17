@@ -804,3 +804,82 @@ async def test_populated_v04_stored_queue_upgrades_in_place(
     await action(hass, "release", resource_id="h1")
     assert restored.snapshot().active == ("h2", "h3", "h4")
     assert restored.snapshot().waiting == ("h5",)
+
+
+async def test_native_number_text_and_helpers_work_as_logical_resources(
+    hass: HomeAssistant, queue_entry: MockConfigEntry
+) -> None:
+    """Native and helper entities share a capacity without unsafe ON/OFF assumptions."""
+    for entity, state in (
+        ("input_number.queue_target", "2"),
+        ("input_text.queue_note", "hello"),
+        ("number.native_target", "15"),
+        ("text.native_note", ""),
+        ("input_boolean.queue_gate", "off"),
+    ):
+        hass.states.async_set(entity, state)
+    await hass.async_block_till_done()
+
+    extra = MockConfigEntry(
+        domain=DOMAIN, title="Logical tests",
+        data={"name": "Logical tests", "max_active": 2, "strategy": "lifo"},
+        options={"monitored_entities": [
+            "input_number.queue_target", "input_text.queue_note",
+            "number.native_target", "text.native_note", "input_boolean.queue_gate",
+        ]},
+    )
+    extra.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(extra.entry_id)
+    await hass.async_block_till_done()
+
+    await action(hass, "resume", config_entry_id=extra.entry_id)
+    for resource_id, entity_id in (
+        ("a", "input_number.queue_target"),
+        ("b", "input_text.queue_note"),
+        ("c", "number.native_target"),
+        ("d", "text.native_note"),
+    ):
+        await action(hass, "request", config_entry_id=extra.entry_id,
+                     resource_id=resource_id, entity_id=entity_id)
+    runtime = hass.data[DOMAIN][extra.entry_id]
+    assert runtime.manager.snapshot().active == ("a", "b")
+    assert runtime.manager.snapshot().waiting == ("d", "c")
+
+    await action(hass, "release", config_entry_id=extra.entry_id, resource_id="a")
+    assert runtime.manager.snapshot().active == ("b", "d")
+    assert runtime.manager.snapshot().waiting == ("c",)
+
+    hass.states.async_set("input_text.queue_note", "unavailable")
+    await hass.async_block_till_done()
+    with pytest.raises(HomeAssistantError, match="must be available"):
+        await action(hass, "release", config_entry_id=extra.entry_id, resource_id="b")
+    assert "b" in runtime.manager.snapshot().active
+
+    hass.states.async_set("input_text.queue_note", "again")
+    await hass.async_block_till_done()
+    await action(hass, "release", config_entry_id=extra.entry_id, resource_id="b")
+
+    # The existing heating queue remains isolated while generic resources run.
+    assert hass.data[DOMAIN][queue_entry.entry_id].manager.snapshot().active == ()
+    assert await hass.config_entries.async_reload(extra.entry_id)
+    await hass.async_block_till_done()
+    assert hass.data[DOMAIN][extra.entry_id].manager.paused
+
+
+async def test_setup_form_entity_selector_accepts_all_domains(
+    hass: HomeAssistant,
+) -> None:
+    """No hardcoded light/switch domain filter in the native HA entity picker."""
+    from homeassistant.helpers.selector import EntitySelector
+
+    assert await async_setup_component(hass, DOMAIN, {})
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": "user"}
+    )
+    field = next(
+        value for key, value in result["data_schema"].schema.items()
+        if key.schema == "monitored_entities"
+    )
+    assert isinstance(field, EntitySelector)
+    assert "domain" not in field.config
+    assert field.config["multiple"] is True
