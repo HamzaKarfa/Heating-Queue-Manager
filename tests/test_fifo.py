@@ -12,6 +12,7 @@ SOURCE_DIR = (
 sys.path.insert(0, str(SOURCE_DIR))
 
 from fifo import ResourceQueue  # noqa: E402
+from strategies import get_provider, get_strategy, strategy_options  # noqa: E402
 
 
 class ResourceQueueTests(unittest.TestCase):
@@ -81,6 +82,28 @@ class ResourceQueueTests(unittest.TestCase):
     def test_strategy_registry_rejects_invalid_key(self):
         with self.assertRaises(ValueError):
             ResourceQueue(strategy="unknown")
+
+    def test_plugin_providers_are_independent_instances(self):
+        fifo_provider = get_provider("fifo")
+        lifo_provider = get_provider("lifo")
+        self.assertEqual(fifo_provider.key, "fifo")
+        self.assertEqual(lifo_provider.key, "lifo")
+        self.assertIsNot(get_strategy("fifo"), get_strategy("fifo"))
+        self.assertIsNot(get_strategy("lifo"), get_strategy("lifo"))
+
+    def test_strategy_selector_uses_registered_providers(self):
+        options = strategy_options()
+        self.assertEqual(
+            {option["value"] for option in options}, {"fifo", "lifo"}
+        )
+        for option in options:
+            provider = get_provider(option["value"])
+            self.assertEqual(option["label"], provider.label)
+            self.assertEqual(provider.config_fields, ())
+
+    def test_provider_rejects_unexpected_settings(self):
+        with self.assertRaises(ValueError):
+            get_provider("fifo").create({"priority": 3})
 
     def test_empty_queue_and_invalid_capacity(self):
         self.assertEqual(ResourceQueue(3).snapshot().waiting, ())
