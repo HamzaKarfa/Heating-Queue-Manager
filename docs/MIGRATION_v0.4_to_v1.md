@@ -1,7 +1,6 @@
 # Migrating Resource Queue Manager v0.4 → v1.0.0
 
-> **Release candidate guidance.** These steps describe the v1 development branch
-> and should first be rehearsed in a separate Home Assistant test instance.
+> **Migration safety:** first rehearse these steps on a separate Home Assistant test instance with a matching backup. Never downgrade v1 storage without restoring its pre-upgrade backup.
 > The v1.0.0 GitHub Release has not yet been published.
 
 This is an **in-place upgrade** for existing `resource_queue_manager` installations.
@@ -47,7 +46,7 @@ not just the number currently loaded.
 
 ## Upgrade procedure
 
-1. Install the **complete** v1 component directory (development branch for testing, or the eventual v1 Marketplace release). Do not mix versions.
+1. Install the **complete** v1 component directory (test a development branch on a separate installation, or install the published v1 Marketplace release). Do not mix component versions.
 2. Restart Home Assistant. The original queue must load in `paused` state; saved active/waiting reservations should still be visible.
 3. Verify its strategy is **FIFO** and that monitored entity bindings and sensor IDs remain intact.
 4. Inspect all physical entities and the `recovery_issues` attribute. Never treat a restored reservation as permission to switch an unknown device ON.
