@@ -6,6 +6,7 @@ synchronous; the HA adapter serializes state mutations and disk writes.
 
 from collections.abc import Callable, Iterable
 from .fifo import ResourceQueue, QueueResult
+from .strategies import DEFAULT_STRATEGY
 
 
 class QueueStateError(ValueError):
@@ -24,8 +25,9 @@ class ResourceQueueCoordinator:
         max_active: int,
         entity_state: Callable[[str], str | None],
         monitored_entities: Iterable[str] = (),
+        strategy: str = DEFAULT_STRATEGY,
     ) -> None:
-        self.queue = ResourceQueue(max_active)
+        self.queue = ResourceQueue(max_active, strategy)
         self._entity_state = entity_state
         self._entities: dict[str, str] = {}
         monitored = list(monitored_entities)
@@ -44,6 +46,7 @@ class ResourceQueueCoordinator:
         saved: object,
         monitored_entities: Iterable[str] = (),
         legacy_max_active: int | None = None,
+        strategy: str = DEFAULT_STRATEGY,
     ) -> "ResourceQueueCoordinator":
         """Restore FIFO order and entity registry; always start paused."""
         if not isinstance(saved, dict):
@@ -56,8 +59,16 @@ class ResourceQueueCoordinator:
             "max_active",
             legacy_max_active if legacy_max_active is not None else max_active,
         )
+        saved_strategy = saved.get("strategy", DEFAULT_STRATEGY)
+        saved_active = saved.get("active")
+        saved_waiting = saved.get("waiting")
+        # Never silently reinterpret already queued requests under a new policy.
+        if saved_strategy != strategy and (saved_active or saved_waiting):
+            raise QueueStateError(
+                "Cannot change strategy while reservations or requests are pending"
+            )
         queue = ResourceQueue.from_snapshot(
-            stored_limit, saved.get("active"), saved.get("waiting")
+            stored_limit, saved_active, saved_waiting, strategy=strategy
         )
         if len(queue.snapshot().active) > max_active:
             raise QueueStateError(
@@ -80,7 +91,7 @@ class ResourceQueueCoordinator:
             ):
                 raise QueueStateError("Legacy entity registry disagrees with queue")
 
-        instance = cls(max_active, entity_state, monitored_entities)
+        instance = cls(max_active, entity_state, monitored_entities, strategy=strategy)
         for resource, entity in bindings.items():
             instance._validate_resource_id(resource)
             instance._validate_entity_id(entity)
@@ -108,12 +119,17 @@ class ResourceQueueCoordinator:
             "active": list(snapshot.active),
             "waiting": list(snapshot.waiting),
             "max_active": self.max_active,
+            "strategy": self.strategy,
             "bindings": dict(self._entities),
         }
 
     def snapshot(self) -> QueueResult:
         """Return an immutable view of reservations."""
         return self.queue.snapshot()
+
+    @property
+    def strategy(self) -> str:
+        return self.queue.strategy
 
     @property
     def max_active(self) -> int:
