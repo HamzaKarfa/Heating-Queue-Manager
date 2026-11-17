@@ -25,7 +25,8 @@ descriptors. This intentionally resembles a Laravel service provider.
 custom_components/resource_queue_manager/
 ├── engine.py                  # Generic reservation engine
 ├── coordinator.py             # Safety, persistence data and entity bindings
-├── config_flow.py             # Shared Home Assistant UI and per-entry options
+├── config_flow.py             # Shared HA UI and entry options
+├── strategy_forms.py         # Provider fields -> native HA selectors
 ├── sensor.py                  # Per-entry sensors
 ├── services.yaml              # Shared HA action declarations
 └── strategies/
@@ -61,9 +62,27 @@ The dependency direction is **Home Assistant adapter → coordinator → engine 
 
 ### Plugin-specific configuration and UI
 
-The plugin's `config.py` declares `StrategyConfigField` descriptors. Both current strategies declare no additional fields. **The future strategy-specific options form and persistence of non-empty plugin settings are not implemented yet.** We should map those descriptors into native Home Assistant selectors in the host adapter instead of rendering custom HTML templates. For example, a priority strategy might later declare default priority, priority bounds, and aging behavior.
+The plugin's `config.py` declares `StrategyConfigField` descriptors; these can include required fields, defaults, numeric bounds and enum choices. Both current strategies declare no additional fields. The host's `strategy_forms.py` translates descriptors into **native Home Assistant selectors** for text, numbers, booleans and choices. It does not render custom HTML templates.
 
-The global Home Assistant action API is shared between strategies. Future strategy-specific request metadata (such as `priority`) needs an explicit extension to the request contract and its validation. It must not silently bypass the host's entity safety checks or change persisted ordering.
+If a registered provider declares settings, setup and Options now present an additional **Strategy configuration** step. The host validates the submitted values with `validate_strategy_config()`, persists them under `strategy_config` in the entry and saved queue snapshot, and passes them into a new isolated policy instance on each setup/reload. Switching a strategy or its settings with active/waiting reservations is rejected.
+
+For example, a future plugin could declare:
+
+```python
+CONFIG_FIELDS = (
+    StrategyConfigField(
+        key="default_priority",
+        label="Default priority",
+        kind="number",
+        required=True,
+        default=3,
+        minimum=1,
+        maximum=10,
+    ),
+)
+```
+
+Those fields would automatically appear in the host's additional strategy form. Each new plugin still needs appropriate English translation keys for its fields. The host also needs separate integration work for **new per-request payloads** (such as `priority`) and any policy-specific snapshot format; `StrategyConfigField` currently describes *queue configuration*, not request metadata. It must not bypass the host's entity safety checks or change persisted ordering silently.
 
 ### Adding an algorithm
 
