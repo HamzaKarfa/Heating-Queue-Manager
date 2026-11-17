@@ -1,6 +1,9 @@
 """LIFO policy; does not preempt active reservations."""
 
 from collections import deque
+from collections.abc import Mapping
+
+from ..request import QueueRequest
 
 
 class LifoStrategy:
@@ -9,5 +12,10 @@ class LifoStrategy:
     key = "lifo"
     label = "LIFO — newest waiting request first"
 
-    def enqueue(self, waiting: deque[str], resource_id: str) -> None:
-        waiting.appendleft(resource_id)
+    def enqueue(
+        self,
+        waiting: deque[str],
+        request: QueueRequest,
+        requests: Mapping[str, QueueRequest],
+    ) -> None:
+        waiting.appendleft(request.resource_id)
