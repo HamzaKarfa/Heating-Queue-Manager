@@ -55,11 +55,11 @@ class ResourceQueueCoordinator:
         strategy: str = DEFAULT_STRATEGY,
         strategy_config: Mapping[str, object] | None = None,
     ) -> "ResourceQueueCoordinator":
-        """Restore FIFO order and entity registry; always start paused."""
+        """Restore saved request order and entity registry; always start paused."""
         if not isinstance(saved, dict):
             raise QueueStateError("Invalid stored coordinator state")
 
-        # The saved limit validates the ORIGINAL FIFO invariants. The new
+        # The saved limit validates the original reservation invariants. The new
         # configured limit can be larger without allocating extra slots yet.
         # Old 0.2 snapshots lacked max_active; use the initial entry limit.
         stored_limit = saved.get(
