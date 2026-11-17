@@ -108,8 +108,15 @@ def get_strategy(
     return get_provider(key).create(validate_strategy_config(key, config))
 
 
-def strategy_options() -> list[dict[str, str]]:
+def strategy_options(language: str = "en") -> list[dict[str, str]]:
+    """Expose provider choices in the current Home Assistant language."""
+    locale = (language or "en").split("-", 1)[0].split("_", 1)[0]
     return [
-        {"value": provider.key, "label": provider.label}
+        {
+            "value": provider.key,
+            "label": getattr(provider, "localized_labels", {}).get(
+                locale, provider.label
+            ),
+        }
         for provider in PROVIDERS.values()
     ]
