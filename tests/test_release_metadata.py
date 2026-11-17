@@ -53,6 +53,17 @@ class ReleaseMetadataTests(unittest.TestCase):
                 for section in ("config", "options", "services"):
                     self.assertIn(section, other)
 
+    def test_no_obsolete_legacy_files_or_docs_references(self):
+        """Avoid shipping compatibility wrappers after generic engine migration."""
+        self.assertFalse((INTEGRATION / "fifo.py").exists())
+        self.assertFalse((ROOT / "tests" / "test_fifo.py").exists())
+        self.assertTrue((ROOT / "tests" / "test_engine.py").is_file())
+        self.assertFalse((ROOT / ".vscode" / "settings.json").exists())
+        dev_guide = (ROOT / "docs" / "DEVELOPMENT.md").read_text("utf-8")
+        self.assertNotIn("├── fifo.py", dev_guide)
+        self.assertNotIn("├── test_fifo.py", dev_guide)
+        self.assertIn("entity_supervision.py", dev_guide)
+
     def test_v1_release_is_manual_only(self):
         yaml_path = ROOT / ".github" / "workflows" / "publish-v1.yml"
         source = yaml_path.read_text("utf-8")
