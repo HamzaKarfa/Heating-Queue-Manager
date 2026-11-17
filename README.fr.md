@@ -4,7 +4,7 @@
 
 **Resource Queue Manager** permet de gérer plusieurs files de ressources indépendantes dans Home Assistant, avec les stratégies **FIFO, LIFO et FIFO avec priorité**, une capacité configurable et des réservations persistantes. Les files coordonnent les autorisations ; les automatisations restent responsables de la commande des appareils.
 
-> **Version 1.0.0 en préparation.** Ce guide concerne la branche `feat/v1-multi-queue-strategies`. La v1 n'est **pas encore publiée** sur Marketplace : la branche principale conserve la version stable v0.4 jusqu'à validation et publication explicite.
+> **Versions :** Marketplace/HACS installe les versions publiées, pas automatiquement les branches de développement. Vérifier la version installée avant de suivre les exemples v1 ; tester toute modification non publiée sur un Home Assistant séparé.
 
 > **Sécurité :** l'intégration ne commande jamais directement les relais. Tes automatisations décident d'allumer et d'éteindre les appareils après réservation. Ce logiciel n'est ni un délesteur électrique certifié, ni un système de protection thermique ; les sécurités matérielles restent indispensables.
 
@@ -26,12 +26,12 @@ Les stratégies n'interrompent **jamais** une réservation déjà active. Une pr
 
 **Prérequis : Home Assistant 2026.11.0 ou version ultérieure.**
 
-Pour la version stable, rechercher **Resource Queue Manager** dans **Marketplace**, ou utiliser le lien `https://github.com/HamzaKarfa/Resource-Queue-Manager`. Le Marketplace installe la version actuellement publiée, et **pas** les modifications de la PR en cours.
+Pour installer une version stable, rechercher **Resource Queue Manager** dans **Marketplace**, ou utiliser le lien `https://github.com/HamzaKarfa/Resource-Queue-Manager`. Marketplace ne récupère pas automatiquement les changements non publiés des PR.
 
-Pour tester la v1 **avant sa publication** :
+Pour tester une **branche de développement** avant qu'elle ne soit publiée :
 
 1. Faire une sauvegarde complète ou, de préférence, utiliser un Home Assistant de test.
-2. Récupérer le dossier complet `custom_components/resource_queue_manager` depuis la [branche v1](https://github.com/HamzaKarfa/Resource-Queue-Manager/tree/feat/v1-multi-queue-strategies/custom_components/resource_queue_manager).
+2. Récupérer le dossier complet `custom_components/resource_queue_manager` depuis la [branche de développement v1](https://github.com/HamzaKarfa/Resource-Queue-Manager/tree/feat/v1-multi-queue-strategies/custom_components/resource_queue_manager), si elle existe encore, ou depuis la branche en cours de revue.
 3. Le copier dans le répertoire `config/custom_components/` du Home Assistant de test, sans mélanger les fichiers de versions différentes.
 4. Redémarrer Home Assistant puis ajouter l'intégration **Resource Queue Manager**.
 5. Configurer un nom, une stratégie, une capacité et quelques entités Home Assistant **sans risque** (par exemple une lampe de test, `input_boolean`, `input_number`, `input_text`, `number` ou `text`).
@@ -119,8 +119,8 @@ Consulter impérativement le [guide complet de migration, avec procédure de ret
 
 ## Développement et publication
 
-Les tests Python, les tests d'intégration Home Assistant, HACS et hassfest sont exécutés par GitHub Actions. La version `1.0.0` est préparée dans le manifeste de la branche, **sans créer de release publique**.
+Les tests Python, les tests d'intégration Home Assistant, HACS et hassfest sont exécutés par GitHub Actions. La publication d'une version stable passe par un workflow manuel après revue de la PR.
 
-La publication est manuelle, réservée à la branche `main` après validation : consulter [DEVELOPMENT.md](docs/DEVELOPMENT.md). La PR reste en brouillon jusqu'aux tests sur une installation Home Assistant de test.
+La publication est manuelle, réservée à la branche `main` après validation : consulter [DEVELOPMENT.md](docs/DEVELOPMENT.md) et la [checklist de validation v1](docs/RELEASE_CHECKLIST_v1.md).
 
 Licence : [MIT](LICENSE).
