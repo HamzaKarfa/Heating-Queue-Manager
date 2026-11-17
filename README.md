@@ -47,7 +47,7 @@ For Priority FIFO, let B have priority 4, C have priority 8 and D have priority 
 
 ## Installation
 
-**Requirements:** Home Assistant **2026.11.0 or newer** and a working `light.*` or `switch.*` entity for each supervised device.
+**Requirements:** Home Assistant **2026.11.0 or newer**. Any existing Home Assistant entity may be supervised, including native `number.*` / `text.*` entities and `input_number.*`, `input_text.*`, `input_boolean.*` helpers.
 
 ### Stable installation from Marketplace
 
@@ -70,7 +70,7 @@ Avoid overwriting a working HACS-managed installation with a feature branch on a
 
 ### First configuration: one queue
 
-When adding **Resource Queue Manager**, enter a unique queue name (e.g. *Heating*), the number of simultaneous reservations (1–50), a strategy and the `light`/`switch` entities supervised by that queue. You can add more entries afterward using **Add integration** again.
+When adding **Resource Queue Manager**, enter a unique queue name (e.g. *Heating*), the number of simultaneous reservations (1–50), a strategy and any Home Assistant entities supervised by that queue. You can add more entries afterward using **Add integration** again.
 
 An entity may be supervised by **only one queue**, and each queue has its own capacity. There is **no shared electrical power limit** across queues.
 
@@ -84,7 +84,7 @@ Each Priority FIFO request must contain `strategy_data.priority`, a numeric valu
 
 ### Recovery: explicitly resume each queue
 
-All queues are restored in `paused` state after Home Assistant startup, integration reload or options changes. Inspect supervised entities before resuming. Every supervised entity must report `on` or `off`; an entity reporting ON without an active reservation blocks recovery.
+All queues are restored in `paused` state after Home Assistant startup, integration reload or options changes. Inspect supervised entities before resuming. Binary ON/OFF entities must report `on` or `off`; an ON entity without an active reservation blocks recovery. Logical entities must report an available, known state. See **Supervision modes** below.
 
 In **Developer tools → Actions**, select `resource_queue_manager.resume` and specify the queue:
 
@@ -109,15 +109,26 @@ Home Assistant's **Developer tools → Actions** exposes the native `request`, `
 | Action | Required data | Optional data | Purpose |
 | --- | --- | --- | --- |
 | `resource_queue_manager.request` | `resource_id`, `entity_id` | `config_entry_id`, `strategy_data` | Acquire capacity or join a waiting queue |
-| `resource_queue_manager.release` | `resource_id` | `config_entry_id` | Release only after the active device reports OFF |
-| `resource_queue_manager.cancel` | `resource_id` | `config_entry_id` | Withdraw a waiting request or release an OFF reservation |
+| `resource_queue_manager.release` | `resource_id` | `config_entry_id` | Confirm OFF for ON/OFF entities; require a known state for logical entities |
+| `resource_queue_manager.cancel` | `resource_id` | `config_entry_id` | Withdraw a waiting request or safely release an active reservation |
 | `resource_queue_manager.resume` | — | `config_entry_id` | Validate supervised states and resume after reload |
 
 Note that `config_entry_id` is effectively **required for all four actions when multiple queues exist**.
 
-**Lifecycle:** Request → reservation becomes active or waits → automation confirms grant → automation switches device ON → automation switches device OFF → Home Assistant reports `off` → automation releases reservation → next waiting request is granted.
+**Physical ON/OFF lifecycle:** Request → reservation becomes active or waits → automation confirms grant → automation switches device ON → automation switches device OFF → Home Assistant reports `off` → automation releases reservation → next waiting request is granted. Logical resources use the same booking lifecycle but do not use an OFF signal.
 
 The integration fires `resource_queue_manager_slot_granted` with `resource_id`, `entity_id` and `config_entry_id` after persisting newly granted slots. Events are not replayed for existing grants. Use the relevant queue sensor's `active` attribute to verify a grant even if an event was missed.
+
+### Supervision modes: physical vs. logical resources
+
+The entity selector is **domain-neutral**. Every queue still requires an actual entity to exist and be explicitly selected as supervised. The service `entity_id` is **required** for each `request`.
+
+| Entity domains | Supervision rule | Active reservation release |
+| --- | --- | --- |
+| `light`, `switch`, `fan`, `input_boolean` | Reject unavailable, unknown and any non-ON/OFF state; reject ON without a booking | Requires observed `off` |
+| `number`, `text`, `input_number`, `input_text`, `input_select`, `sensor`, other domains | Require an existing, known state (not `unknown`/`unavailable`) | Known state is enough; no OFF check |
+
+**Safety boundary:** a generic entity's state does **not** confirm that a physical actuator has stopped. Use a supervised ON/OFF entity, or independent hardware safety, for physical electrical loads. Merely supervising a number or text helper must never be used as proof of power isolation.
 
 ### FIFO or LIFO request
 
@@ -145,7 +156,7 @@ Priority must be supplied on **every new** Priority FIFO request. The same `reso
 
 ### Release or cancel
 
-After your automation switches a device OFF, **wait until Home Assistant reports `off`** before releasing:
+For an ON/OFF entity (light, switch, fan or input_boolean), **wait until Home Assistant reports `off`** before releasing. For a generic number/text/sensor entity, a valid available state is sufficient to release the logical booking; this is **not** evidence that a physical device is safe to switch:
 
 ```yaml
 action: resource_queue_manager.release
@@ -154,7 +165,7 @@ data:
   resource_id: bedroom
 ```
 
-Use `resource_queue_manager.cancel` with the same entry ID and resource ID to withdraw a waiting request. Cancellation of an active reservation also requires its entity to report OFF.
+Use `resource_queue_manager.cancel` with the same entry ID and resource ID to withdraw a waiting request. Cancellation of an active ON/OFF reservation also requires its entity to report OFF; generic entities require an available state.
 
 ### Low-risk test automation
 
@@ -223,14 +234,14 @@ All sensors also expose `strategy`, `config_entry_id`, active/waiting IDs and sa
 | --- | --- |
 | Action says `specify config_entry_id` | Two or more queues are configured; select the owning entry in **all** actions. |
 | Queue is paused after restart or options change | Expected. Inspect supervised entities, then call `resume` on that queue. |
-| `resume` refuses to run | Inspect the queue's `recovery_issues` attribute; fix missing/unavailable or unreserved ON entities. |
+| `resume` refuses to run | Inspect the queue's `recovery_issues` attribute; fix missing/unavailable entities, or ON/OFF entities powered ON without a booking. |
 | `request` rejects `priority` | Priority goes inside `strategy_data` and is only supported by **Priority FIFO**. |
 | Priority request fails for missing metadata | Provide `strategy_data: {priority: 1}` through `{priority: 10}` (inclusive). |
-| Two queues cannot monitor the same relay | This is intentional. Assign each physical entity to one queue only. |
-| Queue is not granting | Confirm its `status` is `ready`, its capacity and the OFF state of reserved devices. |
+| Two queues cannot monitor the same entity | This is intentional. Assign each supervised entity to one queue only. |
+| Queue is not granting | Confirm its `status` is `ready`, its capacity and the supervised entity states. |
 | A lower-priority request never runs | Priority FIFO is non-preemptive and does not have aging; frequent high-priority arrivals may cause starvation. |
 | Changing strategy or configuration is refused | Empty the active and waiting lists safely before switching policies or provider-specific settings. |
-| Release/cancel fails | An active reservation's entity must **report** `off`, not merely receive a turn-off action. |
+| Release/cancel fails | ON/OFF entities must **report** `off`; generic logical entities must be available (not `unknown`/`unavailable`). |
 | A grant event was missed | Read that specific queue's `active` sensor attribute. |
 
 **Safety reminder:** reservation capacity does not measure electrical current or force devices OFF. Keep independent protection devices, thermal limits, and normal circuit protection.
