@@ -15,6 +15,7 @@ from fifo import ResourceQueue  # noqa: E402
 from strategies import (  # noqa: E402
     PROVIDERS,
     FifoStrategy,
+    QueueRequest,
     StrategyConfigField,
     get_provider,
     get_strategy,
@@ -148,6 +149,87 @@ class ResourceQueueTests(unittest.TestCase):
                 validate_strategy_config("demo_config", {})
         finally:
             del PROVIDERS["demo_config"]
+
+    def test_provider_request_metadata_controls_order_and_survives_restore(self):
+        from collections import deque
+
+        class PriorityPolicy:
+            key = "test_priority"
+            label = "Test priority"
+
+            def enqueue(self, waiting, request, requests):
+                # Bigger numbers first, FIFO for equal numbers.
+                new_priority = request.data["priority"]
+                for index, existing_id in enumerate(waiting):
+                    if requests[existing_id].data["priority"] < new_priority:
+                        waiting.insert(index, request.resource_id)
+                        break
+                else:
+                    waiting.append(request.resource_id)
+
+        class PriorityProvider:
+            key = "test_priority"
+            label = "Test priority"
+            description = "Only used to verify the provider contract"
+            config_fields = ()
+            request_fields = (
+                StrategyConfigField(
+                    key="priority", label="Priority", kind="number",
+                    required=True, minimum=1, maximum=10
+                ),
+            )
+
+            def create(self, config=None):
+                return PriorityPolicy()
+
+        PROVIDERS["test_priority"] = PriorityProvider()
+        try:
+            q = ResourceQueue(1, strategy="test_priority")
+            q.request("a", {"priority": 1})
+            q.request("b", {"priority": 2})
+            q.request("c", {"priority": 7})
+            q.request("d", {"priority": 2})
+            self.assertEqual(q.snapshot().active, ("a",))
+            self.assertEqual(q.snapshot().waiting, ("c", "b", "d"))
+            saved = q.export_request_data()
+            self.assertEqual(saved["c"], {"priority": 7})
+            restored = ResourceQueue.from_snapshot(
+                1, list(q.snapshot().active), list(q.snapshot().waiting),
+                strategy="test_priority", request_data=saved
+            )
+            self.assertEqual(restored.export_request_data(), saved)
+            self.assertEqual(restored.release("a").granted, ("c",))
+            self.assertEqual(restored.release("c").granted, ("b",))
+            with self.assertRaises(ValueError):
+                q.request("d", {"priority": 5})
+            with self.assertRaises(ValueError):
+                q.request("z", {"priority": True})
+            with self.assertRaises(ValueError):
+                q.request("z", {"priority": 50})
+            with self.assertRaises(ValueError):
+                q.request("z", {"unexpected": 1})
+            with self.assertRaises(ValueError):
+                q.request("z")
+            with self.assertRaises(ValueError):
+                ResourceQueue.from_snapshot(
+                    1, ["a"], ["b"], strategy="test_priority",
+                    request_data={"orphan": {"priority": 2}}
+                )
+        finally:
+            del PROVIDERS["test_priority"]
+
+    def test_fifo_and_lifo_reject_undeclared_request_metadata(self):
+        for policy in ("fifo", "lifo"):
+            q = ResourceQueue(1, strategy=policy)
+            with self.assertRaises(ValueError):
+                q.request("a", {"priority": 9})
+            self.assertEqual(q.snapshot().active, ())
+            self.assertEqual(q.snapshot().waiting, ())
+
+    def test_legacy_snapshot_restores_empty_request_metadata(self):
+        q = ResourceQueue.from_snapshot(1, ["a"], ["b"], strategy="fifo")
+        self.assertEqual(q.export_request_data(), {})
+        self.assertEqual(q.release("a").granted, ("b",))
 
     def test_plugin_providers_are_independent_instances(self):
         fifo_provider = get_provider("fifo")
