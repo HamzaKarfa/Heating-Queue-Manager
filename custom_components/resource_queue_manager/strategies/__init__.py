@@ -8,7 +8,6 @@ from .priority_fifo import PriorityFifoProvider, PriorityFifoStrategy
 from .registry import (
     DEFAULT_STRATEGY,
     PROVIDERS,
-    STRATEGIES,
     get_provider,
     get_strategy,
     validate_strategy_config,
@@ -29,7 +28,6 @@ __all__ = [
     "PriorityFifoStrategy",
     "DEFAULT_STRATEGY",
     "PROVIDERS",
-    "STRATEGIES",
     "get_provider",
     "get_strategy",
     "validate_strategy_config",
