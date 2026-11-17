@@ -8,6 +8,8 @@
 
 # Resource Queue Manager
 
+[![Add to My Home Assistant](https://my.home-assistant.io/badges/marketplace_repository.svg)](https://my.home-assistant.io/redirect/marketplace_repository/?owner=HamzaKarfa&repository=Resource-Queue-Manager&category=integration)
+
 **Français :** [guide d'installation, configuration et migration](README.fr.md).
 
 **Resource Queue Manager** manages multiple independent resource queues in Home Assistant with **FIFO, LIFO and priority-based scheduling**, configurable capacity and persistent reservations. Each queue has its own supervised entities and state. It coordinates logical grants; your automations remain responsible for switching devices.
