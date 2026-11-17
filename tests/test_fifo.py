@@ -11,7 +11,7 @@ SOURCE_DIR = (
 )
 sys.path.insert(0, str(SOURCE_DIR))
 
-from fifo import ResourceQueue  # noqa: E402
+from engine import ResourceQueue  # noqa: E402
 from strategies import (  # noqa: E402
     PROVIDERS,
     FifoStrategy,
