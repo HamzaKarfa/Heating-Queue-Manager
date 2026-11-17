@@ -12,7 +12,7 @@
 
 **Resource Queue Manager** manages multiple independent resource queues in Home Assistant with **FIFO, LIFO and priority-based scheduling**, configurable capacity and persistent reservations. Each queue has its own supervised entities and state. It coordinates logical grants; your automations remain responsible for switching devices.
 
-> **Release preparation — v1.0.0 development branch.** This README documents the code in `feat/v1-multi-queue-strategies`. Version 1.0.0 is **not yet published**. The Marketplace/default branch remains the stable v0.4 release until the PR is reviewed, merged and a GitHub Release is deliberately created. Do not use a heater or other safety-critical load as your first test.
+> **Versioning:** Marketplace/HACS installs a published release, not an unreleased branch. Check the installed version before following the v1 instructions. When evaluating code ahead of a release, use a separate test instance and start with a noncritical entity.
 
 > **Important:** Resource Queue Manager never switches devices ON or OFF. Your automations do that after obtaining a grant. It is **not a certified electrical load-shedding, thermal safety or overcurrent protection device**. Manual commands, external automation and unsupervised equipment can bypass it.
 
@@ -30,6 +30,8 @@
 - Four read-only diagnostic sensors **per queue**, with strategy and entry ID in their attributes.
 
 See [v1 architecture](docs/V1_ARCHITECTURE.md), [migration guide](docs/MIGRATION_v0.4_to_v1.md), [developer setup](docs/DEVELOPMENT.md), [changelog](CHANGELOG.md) and [v1 release notes](docs/releases/v1.0.0.md).
+
+For maintainers: [v1 release acceptance checklist](docs/RELEASE_CHECKLIST_v1.md) (manual test and publication gates).
 
 ## Scheduling example
 
@@ -53,14 +55,14 @@ For Priority FIFO, let B have priority 4, C have priority 8 and D have priority 
 
 Go to **Settings → Marketplace**, search for *Resource Queue Manager*, install and restart Home Assistant. If the repository is not visible, use the Marketplace's **Add from link** feature with `https://github.com/HamzaKarfa/Resource-Queue-Manager`.
 
-**Until v1 is published, Marketplace installs the stable v0.4 release**, not the features in this README. Use the development steps below if you want to test the PR.
+Marketplace installs the latest published stable version. To inspect unreleased changes, follow the development instructions below and check the corresponding branch/version.
 
-### Testing the v1 branch before release
+### Testing an unreleased development branch
 
-Use a **separate Home Assistant test instance**, or make a full backup first and disable real-device automations. This branch is not an installable Marketplace release.
+Use a **separate Home Assistant test instance**, or make a full backup first and disable real-device automations. Files from a feature branch are not automatically part of the Marketplace release.
 
-1. Browse [the v1 branch](https://github.com/HamzaKarfa/Resource-Queue-Manager/tree/feat/v1-multi-queue-strategies/custom_components/resource_queue_manager).
-2. Copy the **whole** `custom_components/resource_queue_manager` directory from this branch into the test instance's `config/custom_components/resource_queue_manager`; do not mix files from v0.4 and v1.
+1. Browse [the development branch](https://github.com/HamzaKarfa/Resource-Queue-Manager/tree/feat/v1-multi-queue-strategies/custom_components/resource_queue_manager) when it exists, or the branch under review.
+2. Copy the **whole** `custom_components/resource_queue_manager` directory from the selected branch into the test instance's `config/custom_components/resource_queue_manager`; do not mix component files from different versions.
 3. Restart Home Assistant, then go to **Settings → Devices & services → Add integration → Resource Queue Manager**.
 4. Add an entry and configure a **test lamp** or other low-risk entity. Repeat to test a second queue.
 5. Confirm the queue's `status` sensor reads `paused`; inspect supervised entity states and explicitly call `resume` for that entry.
