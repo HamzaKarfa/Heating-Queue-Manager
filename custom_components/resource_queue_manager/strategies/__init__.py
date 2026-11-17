@@ -1,6 +1,7 @@
 """Pluggable queue strategies and their service-provider registry."""
 
 from .base import QueueStrategy, StrategyConfigField, StrategyProvider
+from .request import QueueRequest
 from .fifo import FifoProvider, FifoStrategy
 from .lifo import LifoProvider, LifoStrategy
 from .registry import (
@@ -15,6 +16,7 @@ from .registry import (
 
 __all__ = [
     "QueueStrategy",
+    "QueueRequest",
     "StrategyConfigField",
     "StrategyProvider",
     "FifoProvider",
