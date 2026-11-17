@@ -26,10 +26,18 @@ from .const import (
     CONF_MONITORED_ENTITIES,
     CONF_NAME,
     CONF_STRATEGY,
+    CONF_STRATEGY_CONFIG,
     DEFAULT_MAX_ACTIVE,
     DOMAIN,
 )
-from .strategies import DEFAULT_STRATEGY, STRATEGIES, strategy_options
+from .strategies import (
+    DEFAULT_STRATEGY,
+    STRATEGIES,
+    get_provider,
+    strategy_options,
+    validate_strategy_config,
+)
+from .strategy_forms import strategy_form_schema
 
 STORAGE_VERSION = 1
 
@@ -82,18 +90,19 @@ class ResourceQueueManagerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             ):
                 errors["base"] = "entities_in_use_elsewhere"
             else:
-                # No shared unique_id: each flow creates an independent config entry.
-                return self.async_create_entry(
-                    title=name,
-                    data={
-                        CONF_NAME: name,
-                        CONF_MAX_ACTIVE: int(user_input[CONF_MAX_ACTIVE]),
-                        CONF_STRATEGY: user_input[CONF_STRATEGY],
-                        CONF_MONITORED_ENTITIES: list(
-                            user_input.get(CONF_MONITORED_ENTITIES, [])
-                        ),
-                    },
-                )
+                # No shared unique_id: each flow creates an independent entry.
+                self._pending_data = {
+                    CONF_NAME: name,
+                    CONF_MAX_ACTIVE: int(user_input[CONF_MAX_ACTIVE]),
+                    CONF_STRATEGY: user_input[CONF_STRATEGY],
+                    CONF_MONITORED_ENTITIES: list(
+                        user_input.get(CONF_MONITORED_ENTITIES, [])
+                    ),
+                }
+                if get_provider(user_input[CONF_STRATEGY]).config_fields:
+                    return await self.async_step_strategy()
+                self._pending_data[CONF_STRATEGY_CONFIG] = {}
+                return self.async_create_entry(title=name, data=self._pending_data)
 
         schema = vol.Schema(
             {
@@ -113,6 +122,36 @@ class ResourceQueueManagerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             }
         )
         return self.async_show_form(step_id="user", data_schema=schema, errors=errors)
+
+    async def async_step_strategy(self, user_input: dict | None = None):
+        """Configure fields provided by the selected algorithm module."""
+        strategy = self._pending_data[CONF_STRATEGY]
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            try:
+                normalized = validate_strategy_config(strategy, user_input)
+            except ValueError:
+                errors["base"] = "invalid_strategy_options"
+            else:
+                # A queue may have been created while this flow was open.
+                if any(
+                    e.title == self._pending_data[CONF_NAME]
+                    for e in self.hass.config_entries.async_entries(DOMAIN)
+                ):
+                    errors["base"] = "name_in_use"
+                elif _overlapping_entities(
+                    self.hass, self._pending_data[CONF_MONITORED_ENTITIES]
+                ):
+                    errors["base"] = "entities_in_use_elsewhere"
+                else:
+                    data = dict(self._pending_data)
+                    data[CONF_STRATEGY_CONFIG] = normalized
+                    return self.async_create_entry(title=data[CONF_NAME], data=data)
+        return self.async_show_form(
+            step_id="strategy",
+            data_schema=strategy_form_schema(strategy, user_input),
+            errors=errors,
+        )
 
     @staticmethod
     @callback
@@ -162,7 +201,11 @@ class ResourceQueueOptionsFlow(OptionsFlowWithReload):
                         saved["active"] or saved["waiting"]
                     ):
                         errors["base"] = "strategy_in_use"
-                    if not errors:
+                    # Defer pausing until a plugin-specific form has finished.
+                    if not errors and (
+                        not get_provider(new_strategy).config_fields
+                        or getattr(self, "_strategy_config_ready", False)
+                    ):
                         runtime.manager.pause()
             elif not errors:
                 try:
@@ -189,13 +232,20 @@ class ResourceQueueOptionsFlow(OptionsFlowWithReload):
                     errors["base"] = "storage_unavailable"
 
             if not errors:
-                return self.async_create_entry(
-                    data={
-                        CONF_MONITORED_ENTITIES: selected,
-                        CONF_MAX_ACTIVE: new_limit,
-                        CONF_STRATEGY: new_strategy,
-                    }
-                )
+                pending = {
+                    CONF_MONITORED_ENTITIES: selected,
+                    CONF_MAX_ACTIVE: new_limit,
+                    CONF_STRATEGY: new_strategy,
+                }
+                if get_provider(new_strategy).config_fields:
+                    if not getattr(self, "_strategy_config_ready", False):
+                        self._pending_options = pending
+                        return await self.async_step_strategy()
+                    pending[CONF_STRATEGY_CONFIG] = self._validated_strategy_config
+                    self._strategy_config_ready = False
+                else:
+                    pending[CONF_STRATEGY_CONFIG] = {}
+                return self.async_create_entry(data=pending)
 
         schema = vol.Schema(
             {
@@ -208,4 +258,41 @@ class ResourceQueueOptionsFlow(OptionsFlowWithReload):
         )
         return self.async_show_form(
             step_id="init", data_schema=schema, errors=errors
+        )
+
+    async def async_step_strategy(self, user_input: dict | None = None):
+        """Configure the selected provider before committing options."""
+        pending = self._pending_options
+        strategy = pending[CONF_STRATEGY]
+        errors: dict[str, str] = {}
+        current_strategy = self.config_entry.options.get(
+            CONF_STRATEGY,
+            self.config_entry.data.get(CONF_STRATEGY, DEFAULT_STRATEGY),
+        )
+        previous = (
+            self.config_entry.options.get(
+                CONF_STRATEGY_CONFIG,
+                self.config_entry.data.get(CONF_STRATEGY_CONFIG, {}),
+            )
+            if current_strategy == strategy
+            else {}
+        )
+        if user_input is not None:
+            try:
+                normalized = validate_strategy_config(strategy, user_input)
+            except ValueError:
+                errors["base"] = "invalid_strategy_options"
+            else:
+                self._validated_strategy_config = normalized
+                self._strategy_config_ready = True
+                # Revalidate under the runtime lock before persisting changes.
+                result = await self.async_step_init(dict(pending))
+                if result["type"] == "form" and result.get("step_id") == "init":
+                    self._strategy_config_ready = False
+                return result
+
+        return self.async_show_form(
+            step_id="strategy",
+            data_schema=strategy_form_schema(strategy, user_input or previous),
+            errors=errors,
         )
