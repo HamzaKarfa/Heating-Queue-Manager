@@ -1,4 +1,4 @@
-"""Resource Queue Manager (FIFO): persisted FIFO reservations, no entity switching."""
+"""Resource Queue Manager: persistent, modular, independent reservations."""
 
 import asyncio
 from dataclasses import dataclass
@@ -112,7 +112,7 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
         except Exception as err:
             runtime.manager.pause()
             raise HomeAssistantError(
-                "Unable to save FIFO state; queue has been paused"
+                "Unable to save resource queue state; queue has been paused"
             ) from err
 
     async def _mutate(call: ServiceCall, operation: str) -> None:
@@ -243,7 +243,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     except Exception as err:
         # Never reset to an empty queue on a corrupt/unreadable snapshot.
         raise ConfigEntryNotReady(
-            "Unable to restore FIFO state; preserving existing storage"
+            "Unable to restore resource queue state; preserving existing storage"
         ) from err
 
     manager.pause()
