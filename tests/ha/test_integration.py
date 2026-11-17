@@ -553,3 +553,46 @@ async def test_options_flow_updates_provider_settings_and_recovers(
     runtime = hass.data[DOMAIN][queue_entry.entry_id].manager
     assert runtime.paused
     assert runtime.queue.strategy_config["threshold"] == 3
+
+
+async def test_strategy_specific_options_cannot_change_with_active_booking(
+    hass: HomeAssistant, queue_entry: MockConfigEntry, configured_test_strategy
+) -> None:
+    """A queue must not lose active work when a plugin setting changes."""
+    initial = await hass.config_entries.options.async_init(queue_entry.entry_id)
+    strategy_step = await hass.config_entries.options.async_configure(
+        initial["flow_id"],
+        {
+            "max_active": 3,
+            "strategy": "sample_policy",
+            "monitored_entities": [f"light.relay_{i}" for i in range(1, 6)],
+        },
+    )
+    assert strategy_step["step_id"] == "strategy"
+    saved = await hass.config_entries.options.async_configure(
+        initial["flow_id"], {"threshold": 3, "flavor": "one"}
+    )
+    assert saved["type"].value == "create_entry"
+    await hass.async_block_till_done()
+
+    await action(hass, "resume")
+    await request(hass, 1)
+
+    form = await hass.config_entries.options.async_init(queue_entry.entry_id)
+    options = await hass.config_entries.options.async_configure(
+        form["flow_id"],
+        {
+            "max_active": 3,
+            "strategy": "sample_policy",
+            "monitored_entities": [f"light.relay_{i}" for i in range(1, 6)],
+        },
+    )
+    assert options["step_id"] == "strategy"
+    rejected = await hass.config_entries.options.async_configure(
+        form["flow_id"], {"threshold": 4, "flavor": "one"}
+    )
+    assert rejected["type"].value == "form"
+    assert rejected["errors"]["base"] == "strategy_in_use"
+    manager = hass.data[DOMAIN][queue_entry.entry_id].manager
+    assert manager.queue.strategy_config == {"threshold": 3, "flavor": "one"}
+    assert manager.snapshot().active == ("h1",)
