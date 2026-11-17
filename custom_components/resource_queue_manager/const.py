@@ -2,6 +2,9 @@
 
 DOMAIN = "resource_queue_manager"
 CONF_MAX_ACTIVE = "max_active"
+CONF_NAME = "name"
+CONF_STRATEGY = "strategy"
+ATTR_CONFIG_ENTRY_ID = "config_entry_id"
 DEFAULT_MAX_ACTIVE = 3
 CONF_MONITORED_ENTITIES = "monitored_entities"
 
