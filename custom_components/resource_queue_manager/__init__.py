@@ -30,7 +30,7 @@ from .const import (
     SIGNAL_QUEUE_UPDATED,
 )
 from .coordinator import ResourceQueueCoordinator, QueueStateError
-from .fifo import QueueResult
+from .engine import QueueResult
 from .strategies import DEFAULT_STRATEGY
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
