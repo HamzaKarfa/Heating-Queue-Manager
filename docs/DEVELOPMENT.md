@@ -11,7 +11,7 @@ custom_components/resource_queue_manager/
 ├── const.py               # Integration constants
 ├── coordinator.py         # Entity binding, recovery and safety rules
 ├── engine.py              # Generic queue capacity and scheduling
-├── fifo.py                # Backward-compatible import shim
+├── entity_supervision.py  # Domain-specific ON/OFF and logical rules
 ├── sensor.py              # Four sensors for each config entry
 ├── services.yaml          # Common Home Assistant action schema
 ├── strategy_forms.py      # Provider settings -> native HA selectors
@@ -29,14 +29,19 @@ docs/
 ├── V1_ARCHITECTURE.md
 └── releases/v1.0.0.md
 tests/
-├── test_fifo.py
+├── test_engine.py
 ├── test_coordinator.py
 ├── test_recovery.py
 ├── test_priority_fifo.py
+├── test_supervision.py
 └── ha/test_integration.py
 ```
 
 Core scheduling policies must remain independent from Home Assistant imports. Every integration config entry has its own queue, independent lock and `.storage` key.
+
+**No legacy FIFO shim:** the generic scheduling code is in `engine.py`; tests and plugins import it as `resource_queue_manager.engine`. Strategy `config.py` and `request.py` declarations remain part of each plugin's provider contract, including when the field tuples are empty.
+
+**Entity supervision:** `entity_supervision.py` assigns domain-aware availability and release checks, independently from scheduling strategies. `light`, `switch`, `fan` and `input_boolean` use fail-closed ON/OFF verification; arbitrary Home Assistant domains (including native and helper number/text entities) require a known non-unavailable state. Generic entity values do not prove that a physical device is off. `coordinator.py` enforces these policies, never the strategy packages.
 
 ## Local test setup
 
