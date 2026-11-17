@@ -9,6 +9,7 @@ from .registry import (
     STRATEGIES,
     get_provider,
     get_strategy,
+    validate_strategy_config,
     strategy_options,
 )
 
@@ -25,5 +26,6 @@ __all__ = [
     "STRATEGIES",
     "get_provider",
     "get_strategy",
+    "validate_strategy_config",
     "strategy_options",
 ]
