@@ -44,11 +44,14 @@ STORAGE_VERSION = 1
 MAX_ACTIVE_SELECTOR = NumberSelector(
     NumberSelectorConfig(min=1, max=50, step=1, mode=NumberSelectorMode.BOX)
 )
-def strategy_selector() -> SelectSelector:
-    """Refresh choices from the registered providers for every HA form."""
+def strategy_selector(language: str = "en") -> SelectSelector:
+    """Refresh provider choices in the user's Home Assistant language."""
     return SelectSelector(
         SelectSelectorConfig(
-            options=[SelectOptionDict(**item) for item in strategy_options()],
+            options=[
+                SelectOptionDict(**item)
+                for item in strategy_options(language)
+            ],
             mode=SelectSelectorMode.DROPDOWN,
         )
     )
