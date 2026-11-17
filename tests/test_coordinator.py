@@ -50,6 +50,42 @@ class CoordinatorTests(unittest.TestCase):
         self.assertEqual(self.request(1).granted, ())
         self.assertEqual(self.manager.snapshot().active, ("h1",))
 
+    def test_lifo_coordinator_promotes_newest_waiter(self):
+        manager = ResourceQueueCoordinator(
+            1, self.entities.get, self.entities, strategy="lifo"
+        )
+        for i in range(1, 4):
+            manager.request(f"h{i}", f"light.relay_{i}")
+        self.assertEqual(manager.snapshot().waiting, ("h3", "h2"))
+        self.assertEqual(manager.release("h1").granted, ("h3",))
+
+    def test_legacy_snapshot_defaults_to_fifo(self):
+        self.request(1)
+        self.request(2)
+        saved = self.manager.export_state()
+        saved.pop("strategy")
+        recovered = ResourceQueueCoordinator.from_state(
+            3, self.entities.get, saved, self.entities
+        )
+        self.assertTrue(recovered.paused)
+        self.assertEqual(recovered.strategy, "fifo")
+        self.assertEqual(recovered.snapshot().active, ("h1", "h2"))
+
+    def test_strategy_switch_only_with_empty_queue(self):
+        self.request(1)
+        saved = self.manager.export_state()
+        with self.assertRaises(QueueStateError):
+            ResourceQueueCoordinator.from_state(
+                3, self.entities.get, saved, self.entities, strategy="lifo"
+            )
+        self.manager.release("h1")
+        empty = self.manager.export_state()
+        recovered = ResourceQueueCoordinator.from_state(
+            3, self.entities.get, empty, self.entities, strategy="lifo"
+        )
+        self.assertEqual(recovered.strategy, "lifo")
+        self.assertTrue(recovered.paused)
+
     def test_binding_is_immutable_while_queued(self):
         self.request(1)
         with self.assertRaises(QueueStateError):
