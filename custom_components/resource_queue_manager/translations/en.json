@@ -48,6 +48,10 @@
         "config_entry_id": {
           "name": "Resource queue",
           "description": "Target a particular queue. Optional only when exactly one queue is installed."
+        },
+        "strategy_data": {
+          "name": "Strategy request data",
+          "description": "Optional fields declared by the selected strategy provider. FIFO and LIFO accept no extra request fields."
         }
       }
     },
