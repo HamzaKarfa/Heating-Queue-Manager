@@ -1,6 +1,6 @@
 # Development and integration testing
 
-This document covers the **v1 development branch**, not the published v0.4 release. Resource Queue Manager is a custom integration for Home Assistant 2026.11+ and a pure-Python scheduling engine.
+This document covers Resource Queue Manager v1, a custom integration for Home Assistant 2026.11+ with a pure-Python scheduling engine. Use the current release tag or feature branch when testing unreleased changes.
 
 ## Repository layout
 
@@ -116,7 +116,7 @@ REQUEST_FIELDS = (
 
 ## Release readiness
 
-Version and tag are deliberately **not** published from a PR. Only after manual review and merge to `main` should the maintainer run the guarded manual release workflow.
+Version tags and GitHub releases are deliberately **not** published from pull requests. Only after manual acceptance and merge to `main` should the maintainer run the guarded manual release workflow.
 
 ```bash
 python -m unittest discover -s tests -v
@@ -126,4 +126,4 @@ python -m pytest -q tests/ha/test_integration.py
 
 Before release, verify all three GitHub workflows pass, the `manifest.json` version is `1.0.0`, release notes exist, a v0.4 backup upgrades safely, multi-queue service targeting works on a real test instance, and each queue requires an explicit resume. The separate release workflow requires a manual confirmation token and only runs on `main`; it does not trigger on PRs or merges.
 
-See [migration steps](MIGRATION_v0.4_to_v1.md) and [release notes](releases/v1.0.0.md).
+See [migration steps](MIGRATION_v0.4_to_v1.md), [release notes](releases/v1.0.0.md), and the [manual acceptance checklist](RELEASE_CHECKLIST_v1.md).
