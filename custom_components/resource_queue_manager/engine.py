@@ -1,18 +1,29 @@
-"""Pure-Python strategy-independent reservation engine. Never controls entities directly."""
+"""Strategy-independent, pure-Python reservation engine.
+
+Queue policy controls *only the next-grant order*. Active reservations,
+capacity, de-duplication and request persistence belong to this engine.
+Physical device switching remains strictly outside the engine.
+"""
 
 from collections import deque
-from dataclasses import dataclass
 from collections.abc import Mapping
+from dataclasses import dataclass
 
 if __package__:
-    from .strategies import DEFAULT_STRATEGY, get_strategy, validate_strategy_config
-else:  # Standalone pure-Python tests import fifo.py directly.
-    from strategies import DEFAULT_STRATEGY, get_strategy, validate_strategy_config
+    from .strategies import (
+        DEFAULT_STRATEGY, QueueRequest, get_strategy,
+        validate_request_data, validate_strategy_config,
+    )
+else:  # Legacy standalone imports used by the pure Python test suite.
+    from strategies import (
+        DEFAULT_STRATEGY, QueueRequest, get_strategy,
+        validate_request_data, validate_strategy_config,
+    )
 
 
 @dataclass(frozen=True, slots=True)
 class QueueResult:
-    """Snapshot after a transition and newly allocated reservations."""
+    """Snapshot after a queue transition, preserving legacy ID-only outputs."""
 
     granted: tuple[str, ...]
     active: tuple[str, ...]
@@ -20,12 +31,7 @@ class QueueResult:
 
 
 class ResourceQueue:
-    """Strategy-independent scheduler with a hard reservation count limit.
-
-    The caller owns all physical switching and must confirm a entity is OFF
-    before releasing its reservation. Requests and releases should be
-    serialized by the integration's coordinator.
-    """
+    """Hard-capacity queue with an injected scheduling policy."""
 
     def __init__(
         self,
@@ -33,7 +39,10 @@ class ResourceQueue:
         strategy: str = DEFAULT_STRATEGY,
         strategy_config: Mapping[str, object] | None = None,
     ) -> None:
-        if not isinstance(max_active, int) or isinstance(max_active, bool) or max_active < 1:
+        if (
+            type(max_active) is not int
+            or max_active < 1
+        ):
             raise ValueError("max_active must be a positive integer")
         self.max_active = max_active
         self.strategy = strategy
@@ -41,6 +50,7 @@ class ResourceQueue:
         self._strategy = get_strategy(strategy, self.strategy_config)
         self._active: dict[str, None] = {}
         self._waiting: deque[str] = deque()
+        self._requests: dict[str, QueueRequest] = {}
 
     @classmethod
     def from_snapshot(
@@ -50,56 +60,96 @@ class ResourceQueue:
         waiting: object,
         strategy: str = DEFAULT_STRATEGY,
         strategy_config: Mapping[str, object] | None = None,
+        request_data: object | None = None,
     ) -> "ResourceQueue":
-        """Restore an exact ordering without granting any new reservations.
-
-        Invalid or inconsistent persisted data is rejected, never silently
-        converted into an empty queue.
-        """
+        """Restore grants and metadata exactly; never allocate while loading."""
         instance = cls(max_active, strategy, strategy_config)
         if not isinstance(active, list) or not isinstance(waiting, list):
             raise ValueError("stored active and waiting must be lists")
-
-        all_resources = active + waiting
-        if any(not isinstance(value, str) or not value.strip() or value != value.strip() for value in all_resources):
-            raise ValueError("stored resource IDs must be non-empty normalized strings")
-        if len(all_resources) != len(set(all_resources)):
+        combined = active + waiting
+        if any(
+            not isinstance(value, str)
+            or not value.strip()
+            or value != value.strip()
+            for value in combined
+        ):
+            raise ValueError("stored resource IDs must be normalized strings")
+        if len(combined) != len(set(combined)):
             raise ValueError("duplicate resource ID in saved queue")
         if len(active) > max_active:
             raise ValueError("saved reservations exceed current limit")
         if waiting and len(active) < max_active:
             raise ValueError("saved waiting queue has unallocated free slots")
 
+        if request_data is None:
+            request_data = {}
+        if not isinstance(request_data, dict):
+            raise ValueError("stored request metadata must be a mapping")
+        if set(request_data) - set(combined):
+            raise ValueError("saved request metadata contains unknown resources")
+
+        restored: dict[str, QueueRequest] = {}
+        for resource_id in combined:
+            normalized = validate_request_data(
+                strategy, request_data.get(resource_id, {})
+            )
+            restored[resource_id] = QueueRequest(resource_id, normalized)
+
         instance._active = dict.fromkeys(active)
         instance._waiting = deque(waiting)
+        instance._requests = restored
         return instance
 
-    def request(self, resource_id: str) -> QueueResult:
-        """Enqueue a request; immediately grant if capacity is available."""
+    def request(
+        self,
+        resource_id: str,
+        request_data: Mapping[str, object] | None = None,
+    ) -> QueueResult:
+        """Request a slot with metadata validated by its provider."""
         self._validate_id(resource_id)
-        if resource_id not in self._active and resource_id not in self._waiting:
-            self._strategy.enqueue(self._waiting, resource_id)
+        metadata = validate_request_data(self.strategy, request_data)
+        existing = self._requests.get(resource_id)
+        if existing is not None:
+            if dict(existing.data) != metadata:
+                raise ValueError(
+                    f"Resource {resource_id!r} already has different request metadata"
+                )
+            return self._allocate()
+
+        request = QueueRequest(resource_id, metadata)
+        # A strategy can consult all pending and active request metadata.
+        self._strategy.enqueue(
+            self._waiting, request, {**self._requests, resource_id: request}
+        )
+        if resource_id not in self._waiting:
+            raise ValueError("Strategy failed to enqueue the resource")
+        self._requests[resource_id] = request
         return self._allocate()
 
     def release(self, resource_id: str) -> QueueResult:
-        """Release reservation or withdraw a pending request."""
+        """Release a reservation or withdraw a pending request."""
         self._validate_id(resource_id)
         self._active.pop(resource_id, None)
         try:
             self._waiting.remove(resource_id)
         except ValueError:
             pass
+        self._requests.pop(resource_id, None)
         return self._allocate()
 
     def snapshot(self) -> QueueResult:
-        """Inspect state without changing the queue."""
         return QueueResult((), tuple(self._active), tuple(self._waiting))
 
-    def allocate_pending(self) -> QueueResult:
-        """Promote waiting requests after a verified capacity increase.
+    def export_request_data(self) -> dict[str, dict[str, str | int | float | bool]]:
+        """Persist only non-empty request metadata, keyed by resource ID."""
+        return {
+            resource_id: dict(request.data)
+            for resource_id, request in self._requests.items()
+            if request.data
+        }
 
-        Only the coordinator should call this, after recovery checks.
-        """
+    def allocate_pending(self) -> QueueResult:
+        """Only the coordinator calls this after safety/recovery checks."""
         return self._allocate()
 
     def _allocate(self) -> QueueResult:
@@ -116,5 +166,9 @@ class ResourceQueue:
 
     @staticmethod
     def _validate_id(resource_id: str) -> None:
-        if not isinstance(resource_id, str) or not resource_id.strip():
-            raise ValueError("resource_id must be a non-empty string")
+        if (
+            not isinstance(resource_id, str)
+            or not resource_id.strip()
+            or resource_id != resource_id.strip()
+        ):
+            raise ValueError("resource_id must be a non-empty normalized string")
