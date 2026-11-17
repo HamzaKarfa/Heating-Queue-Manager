@@ -9,9 +9,9 @@
   ],
   "config_flow": true,
   "documentation": "https://github.com/HamzaKarfa/Resource-Queue-Manager",
-  "integration_type": "helper",
+  "integration_type": "service",
   "iot_class": "calculated",
   "issue_tracker": "https://github.com/HamzaKarfa/Resource-Queue-Manager/issues",
   "requirements": [],
-  "version": "1.0.0-rc.1"
+  "version": "1.0.0-rc.2"
 }
