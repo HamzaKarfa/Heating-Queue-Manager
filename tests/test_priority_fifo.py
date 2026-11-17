@@ -88,6 +88,8 @@ class PriorityFifoStrategyTests(unittest.TestCase):
         queue = self.create()
         for metadata in (None, {}, {"priority": 0}, {"priority": 11},
                          {"priority": True}, {"priority": "10"},
+                         {"priority": float("nan")},
+                         {"priority": float("inf")},
                          {"priority": 5, "unknown": 1}):
             with self.subTest(metadata=metadata):
                 with self.assertRaises(ValueError):
