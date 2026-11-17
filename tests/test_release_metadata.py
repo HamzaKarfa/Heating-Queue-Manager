@@ -64,6 +64,15 @@ class ReleaseMetadataTests(unittest.TestCase):
         self.assertNotIn("├── test_fifo.py", dev_guide)
         self.assertIn("entity_supervision.py", dev_guide)
 
+    def test_v1_release_notes_are_ready_to_publish(self):
+        """Stable release must not contain a draft label or unchecked gates."""
+        notes = (ROOT / "docs" / "releases" / "v1.0.0.md").read_text("utf-8")
+        self.assertIn("# Resource Queue Manager — v1.0.0", notes)
+        self.assertIn("/blob/v1.0.0/docs/MIGRATION_v0.4_to_v1.md", notes)
+        for marker in ("not yet published", "Prepared release notes", "- [ ]"):
+            self.assertNotIn(marker, notes)
+        self.assertTrue((ROOT / "docs" / "RELEASE_CHECKLIST_v1.md").is_file())
+
     def test_v1_release_is_manual_only(self):
         yaml_path = ROOT / ".github" / "workflows" / "publish-v1.yml"
         source = yaml_path.read_text("utf-8")
