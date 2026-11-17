@@ -5,7 +5,7 @@ synchronous; the HA adapter serializes state mutations and disk writes.
 """
 
 from collections.abc import Callable, Iterable
-from .fifo import ResourceQueue, QueueResult
+from .engine import ResourceQueue, QueueResult
 from .strategies import DEFAULT_STRATEGY
 
 
