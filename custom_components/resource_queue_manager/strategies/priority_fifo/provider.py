@@ -12,6 +12,15 @@ class PriorityFifoProvider:
 
     key = "priority_fifo"
     label = PriorityFifoStrategy.label
+    localized_labels = {"fr": "FIFO avec priorité"}
+    localized_choices = {
+        "fr": {
+            "priority_order": {
+                "highest_first": "Priorité la plus élevée d'abord",
+                "lowest_first": "Priorité la plus faible d'abord",
+            }
+        }
+    }
     description = (
         "Serve higher-priority waiting requests first, "
         "keeping arrival order for equal priority."
