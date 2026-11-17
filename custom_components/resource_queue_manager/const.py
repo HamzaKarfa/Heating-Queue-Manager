@@ -1,4 +1,4 @@
-"""Constants for Resource Queue Manager (FIFO)."""
+"""Constants for Resource Queue Manager."""
 
 DOMAIN = "resource_queue_manager"
 CONF_MAX_ACTIVE = "max_active"
