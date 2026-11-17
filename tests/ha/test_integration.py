@@ -596,3 +596,85 @@ async def test_strategy_specific_options_cannot_change_with_active_booking(
     manager = hass.data[DOMAIN][queue_entry.entry_id].manager
     assert manager.queue.strategy_config == {"threshold": 3, "flavor": "one"}
     assert manager.snapshot().active == ("h1",)
+
+
+async def test_plugin_request_metadata_service_persists_through_restart(
+    hass: HomeAssistant, monkeypatch
+) -> None:
+    """Provider fields travel through the public service API and survive reload."""
+    from custom_components.resource_queue_manager.strategies import (
+        PROVIDERS, FifoStrategy, StrategyConfigField
+    )
+
+    class MetadataProvider:
+        key = "meta_test"
+        label = "Metadata demo"
+        description = "Test-only provider"
+        config_fields = ()
+        request_fields = (
+            StrategyConfigField(
+                key="priority", label="Priority", kind="number",
+                required=True, minimum=1, maximum=10
+            ),
+        )
+
+        def create(self, config=None):
+            return FifoStrategy()
+
+    monkeypatch.setitem(PROVIDERS, "meta_test", MetadataProvider())
+    assert await async_setup_component(hass, DOMAIN, {})
+    for index in (1, 2):
+        hass.states.async_set(f"light.metadata_{index}", "off")
+    entry = MockConfigEntry(
+        domain=DOMAIN, title="Metadata queue",
+        data={"max_active": 1, "strategy": "meta_test"},
+        options={"monitored_entities": ["light.metadata_1", "light.metadata_2"]},
+    )
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    await action(hass, "resume", config_entry_id=entry.entry_id)
+    await action(
+        hass, "request", config_entry_id=entry.entry_id,
+        resource_id="first", entity_id="light.metadata_1",
+        strategy_data={"priority": 3}
+    )
+    await action(
+        hass, "request", config_entry_id=entry.entry_id,
+        resource_id="second", entity_id="light.metadata_2",
+        strategy_data={"priority": 8}
+    )
+    manager = hass.data[DOMAIN][entry.entry_id].manager
+    assert manager.export_state()["request_data"] == {
+        "first": {"priority": 3}, "second": {"priority": 8}
+    }
+    with pytest.raises(HomeAssistantError):
+        await action(
+            hass, "request", config_entry_id=entry.entry_id,
+            resource_id="second", entity_id="light.metadata_2",
+            strategy_data={"priority": 11}
+        )
+    with pytest.raises(HomeAssistantError):
+        await action(
+            hass, "request", config_entry_id=entry.entry_id,
+            resource_id="second", entity_id="light.metadata_2",
+            strategy_data={"priority": 4}
+        )
+    assert await hass.config_entries.async_reload(entry.entry_id)
+    await hass.async_block_till_done()
+    restored = hass.data[DOMAIN][entry.entry_id].manager
+    assert restored.paused
+    assert restored.snapshot().active == ("first",)
+    assert restored.snapshot().waiting == ("second",)
+    assert restored.export_state()["request_data"] == {
+        "first": {"priority": 3}, "second": {"priority": 8}
+    }
+    await action(hass, "resume", config_entry_id=entry.entry_id)
+    await action(
+        hass, "release", config_entry_id=entry.entry_id,
+        resource_id="first"
+    )
+    assert restored.snapshot().active == ("second",)
+    assert restored.export_state()["request_data"] == {
+        "second": {"priority": 8}
+    }
