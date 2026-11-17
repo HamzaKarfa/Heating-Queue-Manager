@@ -4,6 +4,7 @@ from .base import QueueStrategy, StrategyConfigField, StrategyProvider
 from .request import QueueRequest
 from .fifo import FifoProvider, FifoStrategy
 from .lifo import LifoProvider, LifoStrategy
+from .priority_fifo import PriorityFifoProvider, PriorityFifoStrategy
 from .registry import (
     DEFAULT_STRATEGY,
     PROVIDERS,
@@ -24,6 +25,8 @@ __all__ = [
     "FifoStrategy",
     "LifoProvider",
     "LifoStrategy",
+    "PriorityFifoProvider",
+    "PriorityFifoStrategy",
     "DEFAULT_STRATEGY",
     "PROVIDERS",
     "STRATEGIES",
