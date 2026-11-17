@@ -34,10 +34,10 @@ Pour tester la v1 **avant sa publication** :
 2. Récupérer le dossier complet `custom_components/resource_queue_manager` depuis la [branche v1](https://github.com/HamzaKarfa/Resource-Queue-Manager/tree/feat/v1-multi-queue-strategies/custom_components/resource_queue_manager).
 3. Le copier dans le répertoire `config/custom_components/` du Home Assistant de test, sans mélanger les fichiers de versions différentes.
 4. Redémarrer Home Assistant puis ajouter l'intégration **Resource Queue Manager**.
-5. Configurer un nom, une stratégie, une capacité et quelques entités `light` ou `switch` **sans risque**, par exemple une lampe de test.
+5. Configurer un nom, une stratégie, une capacité et quelques entités Home Assistant **sans risque** (par exemple une lampe de test, `input_boolean`, `input_number`, `input_text`, `number` ou `text`).
 6. Contrôler les états physiques et les capteurs avant de reprendre la file.
 
-Une même entité ne peut pas être supervisée par deux files. Il n'existe **aucune limite globale de puissance** entre les différentes files.
+Une même entité ne peut pas être supervisée par deux files. Il n'existe **aucune limite globale de puissance** entre les différentes files. Les entités ON/OFF restent soumises à une vérification de l'état `off` avant la libération ; les helpers numériques et textuels sont des ressources logiques (vérification de disponibilité uniquement).
 
 ## Appels d'actions
 
@@ -48,6 +48,17 @@ Les actions `request`, `release`, `cancel` et `resume` sont disponibles depuis *
 ![Actions Resource Queue Manager dans Home Assistant : demander, libérer, annuler et reprendre une file](assets/resource-queue-manager-actions.webp)
 
 **Test rapide avec une entité sans risque :** après vérification des relais supervisés, sélectionner la file de test puis exécuter `resume`. Envoyer une demande `request` avec un `resource_id` de test et une entité supervisée ; vérifier que son capteur `active` augmente. En laissant l'entité test à l'état `off`, effectuer `release` et confirmer que `active` diminue. Vérifier également `cancel` sur une demande en attente. Ne pas utiliser un radiateur réel pour le premier essai.
+
+### Types d'entités supervisées
+
+Les entités **natives et les helpers** sont acceptés : `number`, `text`, `sensor`, `input_number`, `input_text`, `input_select`, etc. Les entités utilisées par le chauffage restent les `light` et `switch` existants.
+
+| Type d'entité | Contrôle | Libération d'une réservation active |
+| --- | --- | --- |
+| `light`, `switch`, `fan`, `input_boolean` | État `on` / `off` obligatoire ; refuse une entité allumée sans réservation | **État `off` confirmé obligatoire** |
+| `number`, `text`, `input_number`, `input_text`, autres domaines | Vérifie que l'entité existe et que son état n'est ni `unknown` ni `unavailable` | État disponible suffisant pour la réservation logique |
+
+**Important :** les valeurs des entités numériques ou textuelles ne prouvent **jamais** l'arrêt d'un appareil électrique. Utiliser une entité ON/OFF supervisée et des protections matérielles indépendantes pour des charges réelles.
 
 ### Reprendre une file après le démarrage
 
@@ -77,7 +88,7 @@ Une demande peut être accordée immédiatement ou placée en attente. **L'autom
 
 ### Libérer une place
 
-Après extinction, **attendre la confirmation de l'état `off` dans Home Assistant** :
+Pour les entités ON/OFF (`light`, `switch`, `fan`, `input_boolean`), **attendre la confirmation de l'état `off` dans Home Assistant** :
 
 ```yaml
 action: resource_queue_manager.release
@@ -86,7 +97,7 @@ data:
   resource_id: chambre_1
 ```
 
-L'action `resource_queue_manager.cancel` permet de retirer une demande en attente ou une réservation active dont l'appareil est bien éteint.
+L'action `resource_queue_manager.cancel` retire une demande en attente ou libère une réservation active. Pour les entités ON/OFF, elle exige toujours l'état `off`. Pour les autres entités, elle exige uniquement un état connu et disponible.
 
 ## Capteurs et récupération
 
@@ -94,7 +105,7 @@ Chaque gestionnaire crée quatre capteurs : **active**, **waiting**, **available
 
 Les installations provenant de la v0.4 conservent les identifiants uniques de leurs capteurs d'origine ; les nouvelles files prennent le nom configuré. Vérifier les véritables identifiants dans Home Assistant avant d'écrire les automatisations.
 
-Si `resume` échoue, une entité peut être absente, indisponible ou allumée sans réservation. **Ne jamais supprimer une sauvegarde de réservation pour contourner ce contrôle.**
+Si `resume` échoue, une entité peut être absente, indisponible ou (pour une entité ON/OFF) allumée sans réservation. **Ne jamais supprimer une sauvegarde de réservation pour contourner ce contrôle.**
 
 ## Migration v0.4 → v1
 
