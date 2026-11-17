@@ -1,0 +1,100 @@
+name: Publish v1.0.0-rc.2 (one-shot)
+
+# The only push that can start this workflow is the addition/change of THIS
+# publishing workflow on the dedicated RC branch. Do not retarget stable/main.
+on:
+  push:
+    branches:
+      - release/v1.0.0-rc.2
+    paths:
+      - .github/workflows/publish-v1-rc2.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: resource-queue-manager-publish-v1.0.0-rc.2
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify dedicated RC ref, manifest and release notes
+        run: |
+          test "$GITHUB_REF" = "refs/heads/release/v1.0.0-rc.2" || {
+            echo "::error::Ref must be the dedicated RC.2 branch"; exit 1;
+          }
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          manifest = json.loads(Path("custom_components/resource_queue_manager/manifest.json").read_text())
+          assert manifest["version"] == "1.0.0-rc.2", "Wrong RC version"
+          assert manifest["integration_type"] == "service", "HA config entry picker fix is missing"
+          assert Path("docs/releases/v1.0.0-rc.2.md").is_file()
+          assert Path("docs/MIGRATION_v0.4_to_v1.md").is_file()
+          PY
+
+  tests:
+    needs: preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      - name: Run core and release metadata tests
+        run: python -m unittest discover -s tests -v
+      - name: Install Home Assistant test fixtures
+        run: python -m pip install "pytest-homeassistant==2026.11.1"
+      - name: Run Home Assistant integration tests
+        run: python -m pytest -q tests/ha
+
+  hacs:
+    needs: preflight
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate HACS integration
+        uses: hacs/action@main
+        with:
+          category: integration
+
+  hassfest:
+    needs: preflight
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate Home Assistant manifest
+        uses: home-assistant/actions/hassfest@master
+
+  publish:
+    needs: [preflight, tests, hacs, hassfest]
+    if: github.ref == 'refs/heads/release/v1.0.0-rc.2'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Refuse any existing RC.2 release or tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view v1.0.0-rc.2 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::error::Pre-release v1.0.0-rc.2 already exists"; exit 1;
+          fi
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/v1.0.0-rc.2" >/dev/null 2>&1; then
+            echo "::error::Tag v1.0.0-rc.2 already exists"; exit 1;
+          fi
+      - name: Publish GitHub pre-release without changing stable Latest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create v1.0.0-rc.2 \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "Resource Queue Manager v1.0.0-rc.2" \
+            --notes-file docs/releases/v1.0.0-rc.2.md \
+            --prerelease \
+            --latest=false
