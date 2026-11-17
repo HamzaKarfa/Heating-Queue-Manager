@@ -1,6 +1,7 @@
 """Explicit provider registry and schema validation for queue policies."""
 
 from collections.abc import Mapping
+from math import isfinite
 
 from .base import QueueStrategy, StrategyConfigField, StrategyProvider
 from .fifo.provider import FifoProvider
@@ -66,6 +67,8 @@ def _validate_fields(
         elif field.kind == "number":
             if type(value) not in (int, float):
                 raise ValueError(f"{field.key} must be a number")
+            if isinstance(value, float) and not isfinite(value):
+                raise ValueError(f"{field.key} must be finite")
             if field.minimum is not None and value < field.minimum:
                 raise ValueError(f"{field.key} is below its minimum")
             if field.maximum is not None and value > field.maximum:
