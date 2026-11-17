@@ -1,6 +1,6 @@
 # Version 1 architecture — multiple queue managers
 
-This document describes the **v1.0.0 release candidate**. The manifest version has been staged only on the development branch; the published v0.4 release stays unchanged until tests, manual migration review, merge and explicit publication are complete.
+This document describes the **v1.0.0 architecture**. GitHub release creation is separate from code changes: the release workflow is manual and only runs on `main` after approval.
 
 ## Goals and boundaries
 
