@@ -61,7 +61,7 @@ ENTITIES_SELECTOR = EntitySelector(EntitySelectorConfig(multiple=True))
 
 
 def _overlapping_entities(hass, selected: list[str], exclude: str | None = None) -> set[str]:
-    """Refuse one physical entity being controlled by two independent queues."""
+    """Refuse any supervised entity being bound to two independent queues."""
     selected_set = set(selected)
     overlapping: set[str] = set()
     for entry in hass.config_entries.async_entries(DOMAIN):
