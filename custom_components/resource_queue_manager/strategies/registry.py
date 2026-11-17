@@ -17,7 +17,6 @@ PROVIDERS: dict[str, StrategyProvider] = {
     "lifo": LifoProvider(),
     "priority_fifo": PriorityFifoProvider(),
 }
-STRATEGIES = PROVIDERS  # Legacy config-flow membership alias.
 
 
 def get_provider(key: str) -> StrategyProvider:
