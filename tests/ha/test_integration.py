@@ -367,3 +367,96 @@ async def test_initial_setup_uses_number_box(hass: HomeAssistant) -> None:
     assert selector.config["mode"] == "box"
     assert selector.config["min"] == 1
     assert selector.config["max"] == 50
+
+
+async def test_multi_instance_routes_and_isolates_fifo_lifo_queues(
+    hass: HomeAssistant, queue_entry: MockConfigEntry
+) -> None:
+    """Independent entry IDs must never share reservations or scheduling policy."""
+    for index in range(1, 4):
+        hass.states.async_set(f"light.garden_{index}", "off")
+    await hass.async_block_till_done()
+    other = MockConfigEntry(
+        domain=DOMAIN,
+        title="Garden",
+        data={"name": "Garden", "max_active": 1, "strategy": "lifo"},
+        options={
+            "strategy": "lifo",
+            "monitored_entities": [
+                "light.garden_1",
+                "light.garden_2",
+                "light.garden_3",
+            ],
+        },
+    )
+    other.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(other.entry_id)
+    await hass.async_block_till_done()
+    assert hass.data[DOMAIN][other.entry_id].manager.strategy == "lifo"
+
+    with pytest.raises(HomeAssistantError, match="config_entry_id"):
+        await action(hass, "resume")
+    await action(hass, "resume", config_entry_id=queue_entry.entry_id)
+    await action(hass, "resume", config_entry_id=other.entry_id)
+
+    await action(
+        hass, "request", config_entry_id=queue_entry.entry_id,
+        resource_id="heating", entity_id="light.relay_1"
+    )
+    for index in range(1, 4):
+        await action(
+            hass, "request", config_entry_id=other.entry_id,
+            resource_id=f"garden{index}", entity_id=f"light.garden_{index}"
+        )
+
+    heating = hass.data[DOMAIN][queue_entry.entry_id].manager
+    garden = hass.data[DOMAIN][other.entry_id].manager
+    assert heating.snapshot().active == ("heating",)
+    assert garden.snapshot().active == ("garden1",)
+    assert garden.snapshot().waiting == ("garden3", "garden2")
+
+    await action(
+        hass, "release", config_entry_id=other.entry_id, resource_id="garden1"
+    )
+    assert garden.snapshot().active == ("garden3",)
+    assert garden.snapshot().waiting == ("garden2",)
+    assert heating.snapshot().active == ("heating",)
+
+    assert await hass.config_entries.async_reload(other.entry_id)
+    await hass.async_block_till_done()
+    restored = hass.data[DOMAIN][other.entry_id].manager
+    assert restored.paused
+    assert restored.strategy == "lifo"
+    assert restored.snapshot().active == ("garden3",)
+    assert restored.snapshot().waiting == ("garden2",)
+
+
+async def test_options_reject_strategy_change_with_pending_work(
+    hass: HomeAssistant, queue_entry: MockConfigEntry
+) -> None:
+    await action(hass, "resume")
+    await request(hass, 1)
+    form = await hass.config_entries.options.async_init(queue_entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        form["flow_id"],
+        {
+            "max_active": 3,
+            "strategy": "lifo",
+            "monitored_entities": [f"light.relay_{i}" for i in range(1, 6)],
+        },
+    )
+    assert result["type"].value == "form"
+    assert result["errors"]["base"] == "strategy_in_use"
+    assert hass.data[DOMAIN][queue_entry.entry_id].manager.strategy == "fifo"
+
+
+async def test_second_config_flow_asks_for_name_and_strategy(
+    hass: HomeAssistant, queue_entry: MockConfigEntry
+) -> None:
+    """Creating a second entry remains available with a legacy singleton loaded."""
+    flow = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": "user"}
+    )
+    assert flow["type"].value == "form"
+    fields = {marker.schema for marker in flow["data_schema"].schema}
+    assert {"name", "max_active", "strategy", "monitored_entities"} <= fields
