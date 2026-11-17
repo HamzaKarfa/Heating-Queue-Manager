@@ -255,6 +255,23 @@ class ResourceQueueTests(unittest.TestCase):
             ["priority_order"],
         )
 
+    def test_provider_labels_have_french_translations(self):
+        labels = {x["value"]: x["label"] for x in strategy_options("fr")}
+        self.assertEqual(
+            labels["priority_fifo"], "FIFO avec priorité"
+        )
+        self.assertTrue(labels["fifo"].startswith("FIFO"))
+        self.assertTrue(labels["lifo"].startswith("LIFO"))
+        self.assertEqual(
+            {x["value"]: x["label"] for x in strategy_options("fr-FR")},
+            labels,
+        )
+        provider = get_provider("priority_fifo")
+        self.assertEqual(
+            provider.localized_choices["fr"]["priority_order"]["highest_first"],
+            "Priorité la plus élevée d'abord",
+        )
+
     def test_provider_rejects_unexpected_settings(self):
         with self.assertRaises(ValueError):
             get_provider("fifo").create({"priority": 3})
