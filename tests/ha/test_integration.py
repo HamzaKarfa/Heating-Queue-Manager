@@ -12,6 +12,7 @@ import pytest
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.setup import async_setup_component
+from homeassistant.helpers.storage import Store
 from pytest_homeassistant.common import MockConfigEntry
 
 DOMAIN = "resource_queue_manager"
@@ -768,3 +769,38 @@ async def test_priority_fifo_ha_actions_keep_ties_and_survive_reload(
     assert restored.snapshot().active == ("h5",)
     await action(hass, "release", resource_id="h5")
     assert restored.snapshot().active == ("h3",)
+
+
+async def test_populated_v04_stored_queue_upgrades_in_place(
+    hass: HomeAssistant, queue_entry: MockConfigEntry
+) -> None:
+    """Reload an actual HA entry from the old v0.4 storage schema."""
+    await action(hass, "resume")
+    for index in range(1, 6):
+        await request(hass, index)
+
+    before = hass.data[DOMAIN][queue_entry.entry_id].manager.export_state()
+    legacy = {
+        "active": before["active"],
+        "waiting": before["waiting"],
+        "max_active": before["max_active"],
+        "bindings": before["bindings"],
+    }
+    # Simulate a populated v0.4 .storage file before v1's new fields existed.
+    store = Store(hass, 1, f"{DOMAIN}.{queue_entry.entry_id}")
+    await store.async_save(legacy)
+
+    assert await hass.config_entries.async_reload(queue_entry.entry_id)
+    await hass.async_block_till_done()
+    restored = hass.data[DOMAIN][queue_entry.entry_id].manager
+    assert restored.paused
+    assert restored.strategy == "fifo"
+    assert list(restored.snapshot().active) == legacy["active"]
+    assert list(restored.snapshot().waiting) == legacy["waiting"]
+    assert restored.export_state()["bindings"] == legacy["bindings"]
+    assert restored.export_state()["request_data"] == {}
+
+    await action(hass, "resume")
+    await action(hass, "release", resource_id="h1")
+    assert restored.snapshot().active == ("h2", "h3", "h4")
+    assert restored.snapshot().waiting == ("h5",)
