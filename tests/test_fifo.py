@@ -12,7 +12,15 @@ SOURCE_DIR = (
 sys.path.insert(0, str(SOURCE_DIR))
 
 from fifo import ResourceQueue  # noqa: E402
-from strategies import get_provider, get_strategy, strategy_options  # noqa: E402
+from strategies import (  # noqa: E402
+    PROVIDERS,
+    FifoStrategy,
+    StrategyConfigField,
+    get_provider,
+    get_strategy,
+    strategy_options,
+    validate_strategy_config,
+)
 
 
 class ResourceQueueTests(unittest.TestCase):
@@ -82,6 +90,64 @@ class ResourceQueueTests(unittest.TestCase):
     def test_strategy_registry_rejects_invalid_key(self):
         with self.assertRaises(ValueError):
             ResourceQueue(strategy="unknown")
+
+    def test_provider_specific_settings_are_validated_and_restored(self):
+        class DemoProvider:
+            key = "demo_config"
+            label = "Demo configurable FIFO"
+            description = "Test-only provider"
+            config_fields = (
+                StrategyConfigField(
+                    key="limit", label="Limit", kind="number",
+                    required=True, minimum=1, maximum=10
+                ),
+                StrategyConfigField(
+                    key="mode", label="Mode", kind="select",
+                    choices=("simple", "strict"), default="simple"
+                ),
+                StrategyConfigField(
+                    key="enabled", label="Enabled", kind="boolean",
+                    default=True
+                ),
+            )
+
+            def create(self, config=None):
+                return FifoStrategy()
+
+        PROVIDERS["demo_config"] = DemoProvider()
+        try:
+            config = validate_strategy_config("demo_config", {"limit": 4})
+            self.assertEqual(
+                config, {"limit": 4, "mode": "simple", "enabled": True}
+            )
+            q = ResourceQueue(
+                1, strategy="demo_config", strategy_config=config
+            )
+            q.request("a")
+            q.request("b")
+            self.assertEqual(q.strategy_config, config)
+            restored = ResourceQueue.from_snapshot(
+                1, ["a"], ["b"],
+                strategy="demo_config", strategy_config=config
+            )
+            self.assertEqual(restored.release("a").granted, ("b",))
+            self.assertEqual(restored.strategy_config, config)
+            with self.assertRaises(ValueError):
+                validate_strategy_config("demo_config", {"limit": True})
+            with self.assertRaises(ValueError):
+                validate_strategy_config("demo_config", {"limit": 11})
+            with self.assertRaises(ValueError):
+                validate_strategy_config(
+                    "demo_config", {"limit": 2, "mode": "bogus"}
+                )
+            with self.assertRaises(ValueError):
+                validate_strategy_config(
+                    "demo_config", {"limit": 2, "undeclared": 99}
+                )
+            with self.assertRaises(ValueError):
+                validate_strategy_config("demo_config", {})
+        finally:
+            del PROVIDERS["demo_config"]
 
     def test_plugin_providers_are_independent_instances(self):
         fifo_provider = get_provider("fifo")
