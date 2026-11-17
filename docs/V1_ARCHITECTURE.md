@@ -9,7 +9,7 @@ One Home Assistant integration can manage multiple independent configuration ent
 - A user-defined name (Home Assistant entry title).
 - A selected scheduling policy: `fifo`, `lifo` or `priority_fifo`.
 - A maximum concurrent reservation count (1–50).
-- Its own supervised `light`/`switch` entities and four diagnostic sensors.
+- Its own supervised Home Assistant entities (including native `number` / `text` and helpers such as `input_number`, `input_text`, `input_boolean`) and four diagnostic sensors.
 - An independent `.storage/resource_queue_manager.<config_entry_id>` snapshot, runtime lock, pause/recovery state and queue ordering.
 
 **No entity may be supervised by two entries.** Queues do not share a global capacity. The integration does **not** switch physical devices.
@@ -24,7 +24,8 @@ descriptors. This intentionally resembles a Laravel service provider.
 ```text
 custom_components/resource_queue_manager/
 ├── engine.py                  # Generic reservation engine
-├── coordinator.py             # Safety, persistence data and entity bindings
+├── coordinator.py             # Supervision, persistence data and entity bindings
+├── entity_supervision.py      # Per-domain ON/OFF or availability verification
 ├── config_flow.py             # Shared HA UI and entry options
 ├── strategy_forms.py         # Provider fields -> native HA selectors
 ├── sensor.py                  # Per-entry sensors
@@ -164,7 +165,7 @@ The grant event retains `config_entry_id` for consumers to distinguish queues. T
 - On each start/reload every queue is restored in `paused` and requires its **own** explicit `resume` after supervised entity states have been checked.
 - Active reservations cannot be silently lost; switching strategy with active/waiting work is rejected.
 - Capacity cannot be lowered below active reservations; supervised entities in use cannot be removed.
-- A monitored entity reporting `unknown`/`unavailable`, or ON without an active reservation, blocks recovery.
+- Every supervised entity must report a known state (not `unknown`/`unavailable`). For ON/OFF domains (`light`, `switch`, `fan`, `input_boolean`), ON without an active reservation blocks recovery; active reservations can only be released after observed OFF. For other domains (including native/helper number and text), release requires availability but cannot confirm physical shutdown.
 - Neither a scheduling policy nor a logical slot count constitutes an electrical safety or power-limiting system.
 
 ## Release gate
