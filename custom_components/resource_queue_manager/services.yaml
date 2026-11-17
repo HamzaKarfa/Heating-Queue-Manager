@@ -18,6 +18,10 @@ request:
           domain:
             - light
             - switch
+    strategy_data:
+      required: false
+      selector:
+        object:
 
 release:
   fields:
