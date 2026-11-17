@@ -1,4 +1,4 @@
-"""Pure-Python FIFO coordinator with conservative restart recovery.
+"""Pure-Python resource coordinator with conservative restart recovery.
 
 No Home Assistant imports and NO physical entity control. All operations are
 synchronous; the HA adapter serializes state mutations and disk writes.
@@ -7,6 +7,11 @@ synchronous; the HA adapter serializes state mutations and disk writes.
 from collections.abc import Callable, Iterable, Mapping
 from .engine import ResourceQueue, QueueResult
 from .strategies import DEFAULT_STRATEGY, validate_strategy_config
+from .entity_supervision import (
+    recovery_issue,
+    release_issue,
+    validate_entity_id,
+)
 
 
 class QueueStateError(ValueError):
@@ -168,11 +173,11 @@ class ResourceQueueCoordinator:
         }
         problems: list[str] = []
         for entity in sorted(self._monitored_entities):
-            state = self._entity_state(entity)
-            if state not in ("on", "off"):
-                problems.append(f"{entity}: state {state!r} is unverified")
-            elif state == "on" and entity not in active_entities:
-                problems.append(f"{entity}: ON without a reservation")
+            issue = recovery_issue(
+                entity, self._entity_state(entity), entity in active_entities
+            )
+            if issue:
+                problems.append(issue)
         return tuple(problems)
 
     def resume(self) -> QueueResult:
@@ -228,14 +233,11 @@ class ResourceQueueCoordinator:
             )
 
         state = self._entity_state(entity_id)
-        if state not in ("on", "off"):
-            raise QueueStateError(
-                f"Entity {entity_id!r} is not available (state={state!r})"
-            )
-        if state == "on" and resource_id not in self.queue.snapshot().active:
-            raise QueueStateError(
-                f"Entity {entity_id!r} is ON without a reservation"
-            )
+        issue = recovery_issue(
+            entity_id, state, resource_id in self.queue.snapshot().active
+        )
+        if issue:
+            raise QueueStateError(issue)
 
         try:
             result = self.queue.request(resource_id, request_data)
@@ -258,10 +260,10 @@ class ResourceQueueCoordinator:
         if resource_id in self.queue.snapshot().active:
             entity = self._entities[resource_id]
             state = self._entity_state(entity)
-            if state != "off":
+            issue = release_issue(entity, state)
+            if issue:
                 raise QueueStateError(
-                    f"Cannot release {resource_id!r}: entity {entity!r} "
-                    f"must be OFF (state={state!r})"
+                    f"Cannot release {resource_id!r}: {issue}"
                 )
         problems = self.recovery_issues()
         if problems:
@@ -283,12 +285,7 @@ class ResourceQueueCoordinator:
 
     @staticmethod
     def _validate_entity_id(entity_id: str) -> None:
-        if (
-            not isinstance(entity_id, str)
-            or entity_id.count(".") != 1
-            or entity_id.split(".", 1)[0] not in ("light", "switch")
-            or not entity_id.split(".", 1)[1]
-        ):
-            raise QueueStateError(
-                "entity_id must be a light.* or switch.* entity"
-            )
+        try:
+            validate_entity_id(entity_id)
+        except ValueError as err:
+            raise QueueStateError(str(err)) from err
