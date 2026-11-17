@@ -179,6 +179,9 @@ class ResourceQueueOptionsFlow(OptionsFlowWithReload):
         current_strategy = entry.options.get(
             CONF_STRATEGY, entry.data.get(CONF_STRATEGY, DEFAULT_STRATEGY)
         )
+        current_config = entry.options.get(
+            CONF_STRATEGY_CONFIG, entry.data.get(CONF_STRATEGY_CONFIG, {})
+        )
         new_limit = current_limit
         new_strategy = current_strategy
 
@@ -191,6 +194,17 @@ class ResourceQueueOptionsFlow(OptionsFlowWithReload):
             elif _overlapping_entities(self.hass, selected, entry.entry_id):
                 errors["base"] = "entities_in_use_elsewhere"
 
+            # When a plugin form is required, defer settings validation until
+            # its final submit. No live queue is paused during the extra step.
+            ready = getattr(self, "_strategy_config_ready", False)
+            has_fields = not errors and bool(get_provider(new_strategy).config_fields)
+            pending_plugin_form = bool(has_fields and not ready)
+            candidate_config = (
+                self._validated_strategy_config
+                if ready
+                else current_config if current_strategy == new_strategy else {}
+            )
+
             runtime = self.hass.data.get(DOMAIN, {}).get(entry.entry_id)
             if not errors and runtime is not None:
                 async with runtime.lock:
@@ -199,9 +213,13 @@ class ResourceQueueOptionsFlow(OptionsFlowWithReload):
                         errors["base"] = "entities_in_use"
                     elif new_limit < len(saved["active"]):
                         errors["base"] = "max_active_below_reserved"
-                    elif new_strategy != runtime.manager.strategy and (
-                        saved["active"] or saved["waiting"]
-                    ):
+                    elif (
+                        new_strategy != runtime.manager.strategy
+                        or (
+                            not pending_plugin_form
+                            and candidate_config != runtime.manager.queue.strategy_config
+                        )
+                    ) and (saved["active"] or saved["waiting"]):
                         errors["base"] = "strategy_in_use"
                     # Defer pausing until a plugin-specific form has finished.
                     if not errors and (
@@ -228,7 +246,15 @@ class ResourceQueueOptionsFlow(OptionsFlowWithReload):
                         errors["base"] = "entities_in_use"
                     elif new_limit < len(active):
                         errors["base"] = "max_active_below_reserved"
-                    elif new_strategy != current_strategy and (active or waiting):
+                    elif (
+                        new_strategy != saved.get("strategy", current_strategy)
+                        or (
+                            not pending_plugin_form
+                            and candidate_config != saved.get(
+                                "strategy_config", current_config
+                            )
+                        )
+                    ) and (active or waiting):
                         errors["base"] = "strategy_in_use"
                 except Exception:
                     errors["base"] = "storage_unavailable"
