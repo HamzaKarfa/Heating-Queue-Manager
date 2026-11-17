@@ -23,16 +23,19 @@ published.
 - Provider-validated `strategy_data` in the `request` action, persisted in
   a new `request_data` field.
 - French UI translation coverage and provider-owned translated labels.
+- Domain-neutral entity selector for native `number`/`text` and helpers including
+  `input_number`, `input_text` and `input_boolean`. ON/OFF devices remain guarded
+  by observed OFF before release; other entities require a known state.
 - Expanded English/French documentation, migration/rollback instructions and
   development guides.
 - Tests covering strategy ordering, multiple entries, priority persistence,
-  provider forms, v0.4 snapshot upgrades and release metadata.
+  provider forms, v0.4 snapshot upgrades, logical entity supervision and release metadata.
 - Manually gated `v1.0.0` GitHub release workflow.
 
 ### Changed
 
-- Generic scheduling engine moved to `engine.py` with `fifo.py` kept as a
-  backward-compatible pure-Python import shim.
+- Generic scheduling engine moved to `engine.py`; the obsolete `fifo.py` shim
+  and standalone-import fallback have been removed. Tests import the real package.
 - Existing singleton installations remain FIFO, but **once two or more entries
   are configured, all actions require `config_entry_id`**.
 - HACS/manifest display name is now **Resource Queue Manager** without the
