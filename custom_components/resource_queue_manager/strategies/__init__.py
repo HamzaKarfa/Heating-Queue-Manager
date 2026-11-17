@@ -1,15 +1,29 @@
-"""Pluggable scheduling policies for the generic reservation engine."""
+"""Pluggable queue strategies and their service-provider registry."""
 
-from .base import QueueStrategy
-from .fifo import FifoStrategy
-from .lifo import LifoStrategy
-from .registry import DEFAULT_STRATEGY, STRATEGIES, get_strategy
+from .base import QueueStrategy, StrategyConfigField, StrategyProvider
+from .fifo import FifoProvider, FifoStrategy
+from .lifo import LifoProvider, LifoStrategy
+from .registry import (
+    DEFAULT_STRATEGY,
+    PROVIDERS,
+    STRATEGIES,
+    get_provider,
+    get_strategy,
+    strategy_options,
+)
 
 __all__ = [
     "QueueStrategy",
+    "StrategyConfigField",
+    "StrategyProvider",
+    "FifoProvider",
     "FifoStrategy",
+    "LifoProvider",
     "LifoStrategy",
     "DEFAULT_STRATEGY",
+    "PROVIDERS",
     "STRATEGIES",
+    "get_provider",
     "get_strategy",
+    "strategy_options",
 ]
