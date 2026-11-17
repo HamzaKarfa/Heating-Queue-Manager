@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Créer un gestionnaire de ressources",
-        "description": "Créez une file indépendante. Choisissez une stratégie et les entités light/switch à superviser.",
+        "description": "Créez une file indépendante. Choisissez une stratégie et les entités Home Assistant à superviser, y compris les helpers.",
         "data": {
           "name": "Nom de la file",
           "max_active": "Réservations simultanées",
@@ -47,7 +47,7 @@
         },
         "entity_id": {
           "name": "Entité supervisée",
-          "description": "Entité light ou switch associée. Elle doit être éteinte avant libération."
+          "description": "Entité Home Assistant associée. Les relais, lumières, ventilateurs et input_boolean doivent être à off avant libération ; les autres entités sont vérifiées uniquement pour leur disponibilité."
         },
         "config_entry_id": {
           "name": "File de ressources",
@@ -61,7 +61,7 @@
     },
     "release": {
       "name": "Libérer une réservation",
-      "description": "Libère une réservation uniquement quand Home Assistant confirme l'entité éteinte.",
+      "description": "Libère une réservation après confirmation off pour les entités ON/OFF, ou après vérification de disponibilité pour les ressources logiques.",
       "fields": {
         "resource_id": {
           "name": "Identifiant de ressource",
@@ -75,7 +75,7 @@
     },
     "cancel": {
       "name": "Annuler une demande",
-      "description": "Retire une demande en attente ou libère une réservation dont l'entité est éteinte.",
+      "description": "Retire une demande en attente ou libère une réservation selon le type d'entité supervisée.",
       "fields": {
         "resource_id": {
           "name": "Identifiant de ressource",
@@ -110,7 +110,7 @@
         },
         "data_description": {
           "max_active": "Nombre maximal de réservations actives (1 à 50). Les réservations existantes sont conservées.",
-          "monitored_entities": "Sélectionnez les entités light/switch pilotées par vos automatisations. Les autres ne seront pas supervisées.",
+          "monitored_entities": "Sélectionnez toute entité Home Assistant, dont input_boolean, input_number, input_text, number et text. Les valeurs non ON/OFF ne permettent pas de vérifier un arrêt physique.",
           "strategy": "FIFO, LIFO ou FIFO prioritaire. La file doit être vide pour changer de stratégie ou de paramètres."
         }
       },
