@@ -17,6 +17,7 @@ from .const import (
     ATTR_RESOURCE_ID,
     ATTR_CONFIG_ENTRY_ID,
     ATTR_ENTITY_ID,
+    ATTR_STRATEGY_DATA,
     CONF_MAX_ACTIVE,
     CONF_STRATEGY,
     CONF_STRATEGY_CONFIG,
@@ -44,6 +45,7 @@ REQUEST_SCHEMA = vol.Schema(
         vol.Required(ATTR_RESOURCE_ID): cv.string,
         vol.Required(ATTR_ENTITY_ID): cv.entity_id,
         vol.Optional(ATTR_CONFIG_ENTRY_ID): cv.string,
+        vol.Optional(ATTR_STRATEGY_DATA): dict,
     }
 )
 RESOURCE_SCHEMA = vol.Schema(
@@ -121,6 +123,7 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
                     result = runtime.manager.request(
                         call.data[ATTR_RESOURCE_ID],
                         call.data[ATTR_ENTITY_ID],
+                        call.data.get(ATTR_STRATEGY_DATA),
                     )
                 elif operation == SERVICE_RELEASE:
                     result = runtime.manager.release(call.data[ATTR_RESOURCE_ID])
