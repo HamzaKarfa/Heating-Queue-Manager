@@ -93,7 +93,7 @@ def validate_request_data(
     cannot become unvalidated persisted state.
     """
     return _validate_fields(
-        key, data, get_provider(key).request_fields, "request"
+        key, data, getattr(get_provider(key), "request_fields", ()), "request"
     )
 
 
