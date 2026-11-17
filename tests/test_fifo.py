@@ -55,6 +55,33 @@ class ResourceQueueTests(unittest.TestCase):
         self.assertEqual(result.active, ("a",))
         self.assertFalse(result.granted)
 
+    def test_lifo_promotes_most_recent_waiter_without_preemption(self):
+        q = ResourceQueue(1, strategy="lifo")
+        for resource in ("a", "b", "c", "d"):
+            q.request(resource)
+        self.assertEqual(q.snapshot().active, ("a",))
+        self.assertEqual(q.snapshot().waiting, ("d", "c", "b"))
+        result = q.release("a")
+        self.assertEqual(result.granted, ("d",))
+        self.assertEqual(result.waiting, ("c", "b"))
+
+    def test_lifo_persisted_grant_order_is_preserved(self):
+        q = ResourceQueue(1, strategy="lifo")
+        for resource in ("a", "b", "c"):
+            q.request(resource)
+        saved = q.snapshot()
+        restored = ResourceQueue.from_snapshot(
+            max_active=1,
+            active=list(saved.active),
+            waiting=list(saved.waiting),
+            strategy="lifo",
+        )
+        self.assertEqual(restored.release("a").granted, ("c",))
+
+    def test_strategy_registry_rejects_invalid_key(self):
+        with self.assertRaises(ValueError):
+            ResourceQueue(strategy="unknown")
+
     def test_empty_queue_and_invalid_capacity(self):
         self.assertEqual(ResourceQueue(3).snapshot().waiting, ())
         with self.assertRaises(ValueError):
