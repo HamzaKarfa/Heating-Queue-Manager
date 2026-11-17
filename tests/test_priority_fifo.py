@@ -2,13 +2,16 @@
 
 from pathlib import Path
 import sys
+import types
 import unittest
 
-ROOT = Path(__file__).resolve().parents[1] / "custom_components" / "resource_queue_manager"
-sys.path.insert(0, str(ROOT))
+COMPONENTS_DIR = Path(__file__).resolve().parents[1] / "custom_components"
+package = types.ModuleType("resource_queue_manager")
+package.__path__ = [str(COMPONENTS_DIR / "resource_queue_manager")]
+sys.modules.setdefault("resource_queue_manager", package)
 
-from engine import ResourceQueue  # noqa: E402
-from strategies import get_provider, strategy_options  # noqa: E402
+from resource_queue_manager.engine import ResourceQueue  # noqa: E402
+from resource_queue_manager.strategies import get_provider, strategy_options  # noqa: E402
 
 
 class PriorityFifoStrategyTests(unittest.TestCase):
